@@ -359,6 +359,83 @@ input[type="text"]::placeholder, input[type="number"]::placeholder {
   display: flex;
   gap: 8px;
 }
+.setup-footer.running {
+  display: none;
+}
+.live-bar {
+  display: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 16px;
+}
+.live-bar.visible {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.live-info {
+  flex: 1;
+  min-width: 0;
+}
+.live-info .live-label {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.live-info .live-timer {
+  font-family: var(--mono);
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.live-info .live-timer.warn { color: var(--yellow); }
+.live-info .live-timer.danger { color: var(--red); }
+@keyframes flash-live { 0%,100%{opacity:1} 50%{opacity:.3} }
+.live-info .live-timer.flash { animation: flash-live 0.8s infinite; color: var(--red); }
+.live-progress {
+  width: 100%;
+  height: 3px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 2px;
+  margin-top: 6px;
+  overflow: hidden;
+}
+.live-progress .live-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.5s linear;
+  width: 100%;
+}
+.live-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.live-actions .ctrl-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.live-actions .ctrl-btn:hover { background: rgba(255,255,255,0.12); border-color: var(--border-active); }
+.live-actions .ctrl-btn:active { transform: scale(0.95); }
+.live-actions .ctrl-btn.pause-btn { background: var(--accent-glow); border-color: rgba(59,130,246,0.3); color: var(--accent); }
+.live-actions .ctrl-btn.pause-btn.active { background: rgba(16,185,129,0.15); border-color: rgba(16,185,129,0.3); color: #10b981; }
 
 .btn-launch {
   flex: 1;
@@ -713,7 +790,6 @@ body.show-ui .controls { opacity: 1; }
         </div>
       </div>
     </div>
-
     <div class="setup-footer">
       <button class="btn btn-ghost" id="clearBtn">Clear</button>
       <button class="btn btn-ghost" id="castBtn" title="Send timer to external screen/projector" style="gap:6px;">
@@ -725,10 +801,24 @@ body.show-ui .controls { opacity: 1; }
         Start Program
       </button>
     </div>
+    <div class="live-bar" id="liveBar">
+      <div class="live-info">
+        <div class="live-label" id="liveLabel">-</div>
+        <div class="live-timer" id="liveTimer">00:00</div>
+        <div class="live-progress"><div class="live-bar-fill" id="liveBarFill"></div></div>
+      </div>
+      <div class="live-actions">
+        <button class="ctrl-btn" id="livePrevBtn" title="Previous item">&#9664;</button>
+        <button class="ctrl-btn pause-btn" id="livePauseBtn"><span id="livePauseLabel">Pause</span></button>
+        <button class="ctrl-btn" id="liveSkipBtn" title="Skip to next item">&#9654;</button>
+        <button class="ctrl-btn pause-btn" id="liveEndBtn" title="End program" style="background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.3);color:#ef4444;">&#10005;</button>
+      </div>
+    </div>
   </div>
 </div>
 
 <div id="timer-screen">
+
   <div class="progress-bar-wrap">
     <div class="progress-bar" id="progressBar"></div>
   </div>
@@ -1095,26 +1185,66 @@ document.getElementById('startBtn').onclick = async () => {
   if (!queue.length) { alert("Add at least one item first."); return; }
   SETTINGS.previewSeconds = Math.max(1, +document.getElementById('previewSec').value || 5);
   SETTINGS.gapSeconds = Math.max(0, +document.getElementById('gapSec').value || 0);
-  // Auto-cast to external display when in Electron
-  if (isElectron()) {
+  const isCasting = isElectron() && document.getElementById('displaySelect') && document.getElementById('displaySelect').value;
+  if (isCasting) {
     const sel = document.getElementById('displaySelect');
-    if (sel && sel.value) {
-      await window.electronAPI.openCast(parseInt(sel.value));
-      castWindow = true;
-      clearInterval(castPollInterval);
-      castPollInterval = setInterval(() => {
-        if (!castWindow) { closeCastWindow(); return; }
-        sendCastState();
-      }, 250);
-      setCastBtnActive(true);
-    }
+    await window.electronAPI.openCast(parseInt(sel.value));
+    castWindow = true;
+    clearInterval(castPollInterval);
+    castPollInterval = setInterval(() => {
+      if (!castWindow) { closeCastWindow(); return; }
+      sendCastState();
+    }, 250);
+    setCastBtnActive(true);
+    document.querySelector('.setup-footer').classList.add('running');
+    document.getElementById('liveBar').classList.add('visible');
+  } else {
+    document.getElementById('setup').style.display = 'none';
+    document.getElementById('timer-screen').classList.add('active');
   }
-  document.getElementById('setup').style.display = 'none';
-  document.getElementById('timer-screen').classList.add('active');
   acquireWakeLock();
   buildPills();
   index = 0;
   runPreview();
+};
+
+// Live bar control buttons share the same logic as timer-screen controls
+document.getElementById('livePauseBtn').onclick = () => {
+  togglePause();
+};
+document.getElementById('livePrevBtn').onclick = () => {
+  if (document.getElementById('overlay').classList.contains('visible')) return;
+  clearInterval(timer);
+  clearInterval(msTimer); msTimer = null;
+  if (index > 0) { index--; }
+  currentLabel.classList.remove('visible');
+  runPreview();
+};
+document.getElementById('liveSkipBtn').onclick = () => {
+  if (document.getElementById('overlay').classList.contains('visible')) return;
+  clearInterval(timer);
+  clearInterval(msTimer); msTimer = null;
+  if (index < queue.length - 1) { index++; }
+  currentLabel.classList.remove('visible');
+  runPreview();
+};
+document.getElementById('liveEndBtn').onclick = () => {
+  if (!confirm('End the program?')) return;
+  clearInterval(timer); clearInterval(msTimer); msTimer = null;
+  releaseWakeLock();
+  closeCastWindow();
+  location.reload();
+};
+
+// Hook existing pause into live bar state
+const origTogglePause = togglePause;
+togglePause = function() {
+  origTogglePause();
+  const lbl = document.getElementById('livePauseLabel');
+  if (lbl) {
+    lbl.textContent = isPaused ? 'Resume' : 'Pause';
+    document.getElementById('livePauseBtn').classList.toggle('active', isPaused);
+  }
 };
 
 // Build queue indicator pills
@@ -1208,7 +1338,8 @@ function runGap() {
 function updateDisplay() {
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
-  display.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  const timeStr = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  display.textContent = timeStr;
   display.className = '';
   if (totalSeconds <= 10) display.className = 'flash';
   else if (totalSeconds <= 30) display.className = 'danger';
@@ -1218,6 +1349,17 @@ function updateDisplay() {
   const pct = itemTotalSeconds > 0 ? (totalSeconds / itemTotalSeconds) * 100 : 100;
   progressBar.style.width = pct + '%';
   progressBar.style.background = totalSeconds <= 30 ? '#ef4444' : totalSeconds <= 60 ? '#f59e0b' : '#3b82f6';
+
+  // Update live bar if visible
+  const liveTimer = document.getElementById('liveTimer');
+  if (liveTimer) {
+    liveTimer.textContent = timeStr;
+    liveTimer.className = 'live-timer ' + display.className;
+    document.getElementById('liveLabel').textContent = itemLabelTop.textContent;
+    document.getElementById('liveBarFill').style.width = pct + '%';
+    document.getElementById('liveBarFill').style.background = progressBar.style.background;
+  }
+
   sendCastState();
 }
 
@@ -1227,6 +1369,9 @@ function showOverlay(text, sub, countdown) {
   overlaySub.textContent = sub || '';
   overlayCount.textContent = countdown || '';
   overlay.classList.add('visible');
+  // Update live bar label during preview/gap
+  const liveLabel = document.getElementById('liveLabel');
+  if (liveLabel) liveLabel.textContent = sub || text;
   sendCastState();
 }
 
@@ -1239,6 +1384,13 @@ function hideOverlay() {
 // Complete
 function showComplete() {
   releaseWakeLock();
+  const liveBar = document.getElementById('liveBar');
+  if (liveBar && liveBar.classList.contains('visible')) {
+    document.getElementById('liveLabel').textContent = 'Program Complete!';
+    document.getElementById('liveTimer').textContent = '00:00';
+    document.getElementById('liveTimer').className = 'live-timer';
+    document.getElementById('liveBarFill').style.width = '0%';
+  }
   sendCastState();
   document.getElementById('timer-screen').classList.remove('active');
   document.getElementById('complete-screen').classList.add('active');
@@ -1298,10 +1450,18 @@ document.getElementById('resetBtn').onclick = () => {
 
 // Keyboard shortcuts
 document.addEventListener('keydown', e => {
-  if (document.getElementById('setup').style.display !== 'none') return;
+  const timerActive = document.getElementById('timer-screen').classList.contains('active');
+  const liveVisible = document.getElementById('liveBar').classList.contains('visible');
+  if (!timerActive && !liveVisible) return;
   if (e.key === ' ') { e.preventDefault(); togglePause(); }
-  if (e.key === 'ArrowRight') document.getElementById('skipBtn').click();
-  if (e.key === 'ArrowLeft') document.getElementById('prevBtn').click();
+  if (e.key === 'ArrowRight') {
+    if (timerActive) document.getElementById('skipBtn').click();
+    if (liveVisible) document.getElementById('liveSkipBtn').click();
+  }
+  if (e.key === 'ArrowLeft') {
+    if (timerActive) document.getElementById('prevBtn').click();
+    if (liveVisible) document.getElementById('livePrevBtn').click();
+  }
 });
 
 // ─── EXTERNAL SCREEN (CAST) ───
