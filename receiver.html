@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Program Timer - Display</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@700&family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0a0c10;--text:#f0f2f8;--muted:#7a8199;--accent:#3b82f6;--yellow:#f59e0b;--red:#ef4444;--green:#10b981;--mono:'Space Mono',monospace;--sans:'Outfit',sans-serif;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100dvh;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.progress-wrap{position:fixed;top:0;left:0;right:0;height:5px;background:rgba(255,255,255,0.06);}
+.progress-bar{height:100%;background:var(--accent);transition:width 0.5s linear;width:100%;}
+.top-label{position:fixed;top:22px;left:50%;transform:translateX(-50%);font-size:clamp(14px,2.2vw,28px);font-weight:500;color:var(--muted);background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:30px;padding:8px 24px;white-space:nowrap;max-width:90vw;overflow:hidden;text-overflow:ellipsis;}
+.pills{position:fixed;top:26px;right:32px;display:flex;gap:8px;align-items:center;}
+.pill{width:12px;height:12px;border-radius:50%;background:rgba(255,255,255,0.15);}
+.pill.done{background:var(--green);}
+.pill.active{background:var(--accent);transform:scale(1.4);}
+.main-wrap{display:flex;align-items:baseline;}
+#timerDisplay{font-family:var(--mono);font-size:clamp(100px,26vw,300px);font-weight:700;letter-spacing:-0.03em;line-height:1;color:var(--text);transition:color .5s;}
+#timerDisplay.warn{color:var(--yellow);}
+#timerDisplay.danger{color:var(--red);}
+@keyframes flash{0%,100%{opacity:1}50%{opacity:.25}}
+#timerDisplay.flash{animation:flash .8s infinite;color:var(--red);}
+#msDisplay{font-family:var(--mono);font-weight:700;color:var(--muted);font-size:clamp(40px,8vw,100px);letter-spacing:.01em;visibility:hidden;display:inline;}
+#msDisplay.on{visibility:visible;}
+.sub-label{font-size:clamp(18px,3.5vw,48px);font-weight:300;color:var(--muted);margin-top:16px;letter-spacing:.06em;text-transform:uppercase;opacity:0;transition:opacity .5s;}
+.sub-label.visible{opacity:1;}
+#overlay{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg);z-index:20;opacity:0;pointer-events:none;transition:opacity .4s;}
+#overlay.visible{opacity:1;}
+.ov-text{font-size:clamp(48px,14vw,160px);font-weight:600;letter-spacing:-.02em;color:var(--yellow);text-align:center;padding:0 32px;}
+.ov-sub{font-size:clamp(14px,2vw,24px);color:var(--muted);margin-top:16px;letter-spacing:.06em;text-transform:uppercase;}
+.ov-count{font-family:var(--mono);font-size:clamp(32px,7vw,80px);color:rgba(255,255,255,.2);margin-top:24px;}
+#paused-badge{position:fixed;bottom:32px;left:50%;transform:translateX(-50%);font-size:13px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:6px 20px;opacity:0;transition:opacity .3s;}
+#paused-badge.visible{opacity:1;}
+#complete{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;background:var(--bg);}
+#complete.active{display:flex;}
+#complete .icon{font-size:80px;margin-bottom:20px;}
+#complete .title{font-size:clamp(36px,8vw,90px);font-weight:600;color:var(--green);}
+#complete .sub{font-size:clamp(14px,2.5vw,28px);color:var(--muted);margin-top:12px;}
+</style>
+</head>
+<body>
+<div class="progress-wrap"><div class="progress-bar" id="bar"></div></div>
+<div class="top-label" id="topLabel">-</div>
+<div class="pills" id="pills"></div>
+<div class="main-wrap"><div id="timerDisplay">--:--</div><div id="msDisplay">.00</div></div>
+<div class="sub-label" id="subLabel"></div>
+<div id="overlay"><div class="ov-text" id="ovText"></div><div class="ov-sub" id="ovSub"></div><div class="ov-count" id="ovCount"></div></div>
+<div id="paused-badge">Paused</div>
+<div id="complete"><div class="icon">&#x2705;</div><div class="title">Program Complete</div><div class="sub">All agenda items finished</div></div>
+<script>
+var display    = document.getElementById('timerDisplay');
+var msDisplay  = document.getElementById('msDisplay');
+var bar        = document.getElementById('bar');
+var topLabel   = document.getElementById('topLabel');
+var pillsEl    = document.getElementById('pills');
+var subLabel   = document.getElementById('subLabel');
+var overlay    = document.getElementById('overlay');
+var ovText     = document.getElementById('ovText');
+var ovSub      = document.getElementById('ovSub');
+var ovCount    = document.getElementById('ovCount');
+var pausedBadge= document.getElementById('paused-badge');
+var complete   = document.getElementById('complete');
+
+function applyState(d) {
+  display.textContent  = d.time || '--:--';
+  display.className    = d.cls  || '';
+  bar.style.width      = (d.pct || 100) + '%';
+  bar.style.background = d.barColor || '#3b82f6';
+  msDisplay.textContent= d.ms  || '.00';
+  msDisplay.className  = d.msOn ? 'on' : '';
+  topLabel.textContent = d.label || '-';
+  subLabel.textContent = d.sub   || '';
+  subLabel.className   = 'sub-label' + (d.sub ? ' visible' : '');
+  pausedBadge.className= d.paused ? 'visible' : '';
+  overlay.className    = d.overlayVisible ? 'visible' : '';
+  if (d.overlayVisible) { ovText.textContent = d.ovText||''; ovSub.textContent = d.ovSub||''; ovCount.textContent = d.ovCount||''; }
+  complete.className   = d.complete ? 'active' : '';
+  if (d.pills) {
+    pillsEl.innerHTML = d.pills.map(function(s){ return '<div class="pill '+s+'"></div>'; }).join('');
+  }
+}
+
+if (typeof window.electronAPI !== 'undefined') {
+  window.electronAPI.onCastState(function(state) {
+    applyState(state);
+  });
+} else {
+  var KEY = 'pt_cast_state';
+  window.addEventListener('storage', function(e) {
+    if (e.key !== KEY) return;
+    try { applyState(JSON.parse(e.newValue)); } catch(err) {}
+  });
+  setInterval(function() {
+    try {
+      var raw = localStorage.getItem(KEY);
+      if (raw) applyState(JSON.parse(raw));
+    } catch(err) {}
+  }, 250);
+}
+</script>
+</body>
+</html>

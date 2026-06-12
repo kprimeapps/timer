@@ -1,0 +1,33 @@
+{
+  "name": "program-timer",
+  "version": "1.0.0",
+  "description": "Program Timer - Fullscreen event timer with external display support",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win portable",
+    "build:mac": "electron-builder --mac dmg"
+  },
+  "build": {
+    "appId": "com.programtimer.app",
+    "productName": "Program Timer",
+    "win": {
+      "target": "portable"
+    },
+    "portable": {
+      "artifactName": "ProgramTimer-${version}.exe"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "receiver.html",
+      "timer.html",
+      "package.json"
+    ],
+    "extraResources": []
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}
