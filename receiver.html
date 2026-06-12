@@ -83,7 +83,7 @@ function applyState(d) {
 }
 
 if (typeof window.__TAURI__ !== 'undefined') {
-  window.__TAURI__.core.listen('cast-state', function(event) {
+  window.__TAURI__.event.listen('cast-state', function(event) {
     applyState(event.payload);
   });
 } else {

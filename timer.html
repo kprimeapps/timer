@@ -1484,19 +1484,19 @@ let castPollInterval = null;
     let hasExternal = false;
     displays.forEach(d => {
       const opt = document.createElement('option');
-      opt.value = d.id;
+      opt.value = d.name;
       if (d.primary) {
-        opt.textContent = d.internal ? 'Built-in Display' : 'Primary Display';
+        opt.textContent = 'Primary Display (' + d.width + 'x' + d.height + ')';
       } else {
         hasExternal = true;
-        opt.textContent = 'External Display (' + d.bounds.width + 'x' + d.bounds.height + ')';
+        opt.textContent = 'External Display (' + d.width + 'x' + d.height + ')';
       }
       sel.appendChild(opt);
     });
     // Auto-select first external display
     if (hasExternal) {
       const external = displays.find(d => !d.primary);
-      if (external) sel.value = external.id;
+      if (external) sel.value = external.name;
     } else if (displays.length <= 1) {
       sel.style.display = 'none';
     }
@@ -1650,7 +1650,7 @@ function sendCastPills(pillStates) { sendCastState(); }
 function openCastWindow() {
   if (isTauri()) {
     const sel = document.getElementById('displaySelect');
-    const displayId = sel && sel.value ? parseInt(sel.value) : null;
+    const displayId = sel && sel.value ? sel.value : null;
     window.__TAURI__.core.invoke('open_cast', { monitorName: displayId }).then(() => {
       castWindow = true;
       clearInterval(castPollInterval);
@@ -1717,7 +1717,7 @@ document.getElementById('castBtnTimer').onclick = () => {
 };
 
 if (isTauri()) {
-  window.__TAURI__.core.listen('cast-closed', () => {
+  window.__TAURI__.event.listen('cast-closed', () => {
     castWindow = null;
     setCastBtnActive(false);
   });
