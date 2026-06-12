@@ -1,0 +1,14 @@
+{
+  "identifier": "default",
+  "description": "Default permissions for Program Timer",
+  "windows": ["main", "cast"],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "core:window:allow-close",
+    "core:window:allow-set-focus",
+    "core:event:default",
+    "core:event:allow-listen",
+    "core:event:allow-emit"
+  ]
+}

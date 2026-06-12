@@ -82,9 +82,9 @@ function applyState(d) {
   }
 }
 
-if (typeof window.electronAPI !== 'undefined') {
-  window.electronAPI.onCastState(function(state) {
-    applyState(state);
+if (typeof window.__TAURI__ !== 'undefined') {
+  window.__TAURI__.core.listen('cast-state', function(event) {
+    applyState(event.payload);
   });
 } else {
   var KEY = 'pt_cast_state';

@@ -1185,10 +1185,10 @@ document.getElementById('startBtn').onclick = async () => {
   if (!queue.length) { alert("Add at least one item first."); return; }
   SETTINGS.previewSeconds = Math.max(1, +document.getElementById('previewSec').value || 5);
   SETTINGS.gapSeconds = Math.max(0, +document.getElementById('gapSec').value || 0);
-  const isCasting = isElectron() && document.getElementById('displaySelect') && document.getElementById('displaySelect').value;
+  const isCasting = isTauri() && document.getElementById('displaySelect') && document.getElementById('displaySelect').value;
   if (isCasting) {
     const sel = document.getElementById('displaySelect');
-    await window.electronAPI.openCast(parseInt(sel.value));
+    await window.__TAURI__.core.invoke('open_cast', { monitorName: sel.value });
     castWindow = true;
     clearInterval(castPollInterval);
     castPollInterval = setInterval(() => {
@@ -1465,8 +1465,8 @@ document.addEventListener('keydown', e => {
 });
 
 // ─── EXTERNAL SCREEN (CAST) ───
-function isElectron() {
-  return typeof window.electronAPI !== 'undefined';
+function isTauri() {
+  return typeof window.__TAURI__ !== 'undefined';
 }
 
 let castWindow = null;
@@ -1475,8 +1475,8 @@ let castPollInterval = null;
 
 // Populate display selector in Electron mode
 (function initCast() {
-  if (!isElectron()) return;
-  window.electronAPI.getDisplays().then(displays => {
+  if (!isTauri()) return;
+  window.__TAURI__.core.invoke('get_displays').then(displays => {
     const sel = document.getElementById('displaySelect');
     if (!sel) return;
     sel.style.display = 'inline-block';
@@ -1638,8 +1638,8 @@ function sendCastState() {
     pills: pillStates,
     t: Date.now()
   };
-  if (isElectron()) {
-    window.electronAPI.sendCastState(state);
+  if (isTauri()) {
+    window.__TAURI__.core.invoke('send_cast_state', { state });
   } else {
     try { localStorage.setItem('pt_cast_state', JSON.stringify(state)); } catch(e) {}
   }
@@ -1648,10 +1648,10 @@ function sendCastState() {
 function sendCastPills(pillStates) { sendCastState(); }
 
 function openCastWindow() {
-  if (isElectron()) {
+  if (isTauri()) {
     const sel = document.getElementById('displaySelect');
     const displayId = sel && sel.value ? parseInt(sel.value) : null;
-    window.electronAPI.openCast(displayId).then(() => {
+    window.__TAURI__.core.invoke('open_cast', { monitorName: displayId }).then(() => {
       castWindow = true;
       clearInterval(castPollInterval);
       castPollInterval = setInterval(() => {
@@ -1680,8 +1680,8 @@ function openCastWindow() {
 function closeCastWindow() {
   clearInterval(castPollInterval);
   castPollInterval = null;
-  if (isElectron()) {
-    window.electronAPI.closeCast();
+  if (isTauri()) {
+    window.__TAURI__.core.invoke('close_cast');
   } else if (castWindow && !castWindow.closed) {
     castWindow.close();
   }
@@ -1716,8 +1716,8 @@ document.getElementById('castBtnTimer').onclick = () => {
   else { openCastWindow(); }
 };
 
-if (isElectron()) {
-  window.electronAPI.onCastClosed(() => {
+if (isTauri()) {
+  window.__TAURI__.core.listen('cast-closed', () => {
     castWindow = null;
     setCastBtnActive(false);
   });

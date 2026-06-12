@@ -16,11 +16,13 @@ jobs:
         with:
           node-version: 22
 
-      - run: npm ci
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
 
-      - run: npm run build
+      - name: Build
+        run: npx @tauri-apps/cli@latest build --ci
 
       - uses: actions/upload-artifact@v4
         with:
           name: ProgramTimer-Windows
-          path: dist/*.exe
+          path: src-tauri/target/release/program-timer.exe
