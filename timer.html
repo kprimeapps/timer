@@ -877,6 +877,7 @@ body.show-ui .controls { opacity: 1; }
 </div>
 
 <script>
+try {
 const SETTINGS = { previewSeconds: 5, gapSeconds: 0 };
 let queue = [];
 let index = 0;
@@ -1754,6 +1755,13 @@ initDB().then(() => {
 }).catch(err => {
   console.error("IndexedDB error initialization: ", err);
 });
+} catch (e) {
+  const div = document.createElement('div');
+  div.style.cssText = 'position:fixed;top:0;left:0;right:0;background:red;color:white;z-index:9999;padding:10px;font-size:16px;white-space:pre-wrap';
+  div.textContent = `JS ERROR: ${e.message}\n${e.stack || ''}`;
+  document.body.prepend(div);
+  console.error(e);
+}
 </script>
 </body>
 </html>
