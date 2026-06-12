@@ -47,7 +47,7 @@ ipcMain.handle('get-displays', () => {
   }));
 });
 
-ipcMain.handle('open-cast', (_event, displayId) => {
+ipcMain.handle('open-cast', async (_event, displayId) => {
   if (castWindow && !castWindow.isDestroyed()) {
     castWindow.close();
     castWindow = null;
@@ -80,7 +80,7 @@ ipcMain.handle('open-cast', (_event, displayId) => {
     backgroundColor: '#0a0c10',
   });
 
-  castWindow.loadFile('receiver.html');
+  await castWindow.loadFile('receiver.html');
 
   castWindow.on('closed', () => {
     castWindow = null;
