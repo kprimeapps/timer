@@ -732,6 +732,7 @@ body.show-ui .controls { opacity: 1; }
 }
 .lock-box .btn-unlock:hover { background: #2563eb; }
 .lock-box .error { color: #ef4444; font-size: 13px; margin-top: 8px; display: none; }
+.lock-box .contact-info { font: 14px/1.6 'Outfit', sans-serif; color: #aabbcc; margin-bottom: 8px; }
 </style>
 </head>
 <body>
@@ -912,7 +913,12 @@ body.show-ui .controls { opacity: 1; }
 <div id="lock-overlay">
   <div class="lock-box">
     <h2>Trial Expired</h2>
-    <p>Your 10-minute trial has ended. Enter your unlock code to continue using Program Timer.</p>
+    <p>Your 10-minute trial has ended. To unlock the full version, contact:</p>
+    <div class="contact-info">
+      <div>📧 kprimeconsider@gmail.com</div>
+      <div>📞 +233 544 343 586</div>
+    </div>
+    <p style="margin-top:16px;font-size:13px;color:#667788">Enter your unlock code below:</p>
     <input type="text" id="unlockInput" placeholder="Unlock code" autocomplete="off">
     <button class="btn-unlock" id="unlockBtn">Unlock</button>
     <div class="error" id="unlockError">Invalid unlock code</div>
@@ -1509,17 +1515,26 @@ document.addEventListener('keydown', e => {
 });
 
 // ─── LICENSE / TRIAL ───
+let trialInterval = null;
+
 async function checkLicense() {
-  if (!isTauri()) return true;
+  if (!isTauri()) return;
   try {
     const status = await window.__TAURI__.core.invoke('get_trial_status');
-    if (status.unlocked) return true;
-    if (status.remainingSeconds > 0) return true;
-    document.getElementById('lock-overlay').classList.add('active');
-    return false;
+    if (status.unlocked) {
+      if (trialInterval) { clearInterval(trialInterval); trialInterval = null; }
+      return;
+    }
+    if (status.remainingSeconds <= 0) {
+      document.getElementById('lock-overlay').classList.add('active');
+      if (trialInterval) { clearInterval(trialInterval); trialInterval = null; }
+      return;
+    }
+    if (!trialInterval) {
+      trialInterval = setInterval(checkLicense, 2000);
+    }
   } catch (e) {
     console.error("License check failed:", e);
-    return true;
   }
 }
 
