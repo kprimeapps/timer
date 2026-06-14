@@ -4,7 +4,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 const TRIAL_SECONDS: u64 = 600;
-const UNLOCK_CODE: &str = option_env!("UNLOCK_CODE").unwrap_or("dev-unlock-change-me");
+const UNLOCK_CODE: &str = match option_env!("UNLOCK_CODE") {
+    Some(code) => code,
+    None => "dev-unlock-change-me",
+};
 
 fn now() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
