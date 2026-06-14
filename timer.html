@@ -909,6 +909,16 @@ body.show-ui .controls { opacity: 1; }
   </button>
 </div>
 
+<div id="lock-overlay">
+  <div class="lock-box">
+    <h2>Trial Expired</h2>
+    <p>Your 10-minute trial has ended. Enter your unlock code to continue using Program Timer.</p>
+    <input type="text" id="unlockInput" placeholder="Unlock code" autocomplete="off">
+    <button class="btn-unlock" id="unlockBtn">Unlock</button>
+    <div class="error" id="unlockError">Invalid unlock code</div>
+  </div>
+</div>
+
 <script>
 try {
 const SETTINGS = { previewSeconds: 5, gapSeconds: 0 };
@@ -1831,17 +1841,7 @@ initDB().then(() => {
   document.body.prepend(div);
   console.error(e);
 }
+
 </script>
-
-<div id="lock-overlay">
-  <div class="lock-box">
-    <h2>Trial Expired</h2>
-    <p>Your 10-minute trial has ended. Enter your unlock code to continue using Program Timer.</p>
-    <input type="text" id="unlockInput" placeholder="Unlock code" autocomplete="off">
-    <button class="btn-unlock" id="unlockBtn">Unlock</button>
-    <div class="error" id="unlockError">Invalid unlock code</div>
-  </div>
-</div>
-
 </body>
 </html>
