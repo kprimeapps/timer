@@ -20,6 +20,8 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Build
+        env:
+          UNLOCK_CODE: ${{ secrets.UNLOCK_CODE }}
         run: npx @tauri-apps/cli@latest build --ci
 
       - uses: actions/upload-artifact@v4

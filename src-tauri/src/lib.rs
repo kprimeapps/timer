@@ -1,5 +1,79 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+
+const TRIAL_SECONDS: u64 = 600;
+const UNLOCK_CODE: &str = option_env!("UNLOCK_CODE").unwrap_or("dev-unlock-change-me");
+
+fn now() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+struct LicenseState {
+    total_used_seconds: u64,
+    last_save_at: u64,
+    unlocked: bool,
+}
+
+impl Default for LicenseState {
+    fn default() -> Self {
+        let t = now();
+        Self { total_used_seconds: 0, last_save_at: t, unlocked: false }
+    }
+}
+
+fn state_path(app: &tauri::AppHandle) -> PathBuf {
+    app.path().app_data_dir().expect("app data dir").join("license.json")
+}
+
+fn load_state(app: &tauri::AppHandle) -> LicenseState {
+    let path = state_path(app);
+    std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+fn save_state(app: &tauri::AppHandle, state: &LicenseState) {
+    let path = state_path(app);
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&path, serde_json::to_string(state).unwrap());
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TrialStatus {
+    remaining_seconds: u64,
+    unlocked: bool,
+}
+
+#[tauri::command]
+fn get_trial_status(app: tauri::AppHandle) -> TrialStatus {
+    let mut state = load_state(&app);
+    let t = now();
+    let elapsed = t.saturating_sub(state.last_save_at);
+    state.total_used_seconds = state.total_used_seconds.saturating_add(elapsed);
+    state.last_save_at = t;
+    save_state(&app, &state);
+    let remaining = TRIAL_SECONDS.saturating_sub(state.total_used_seconds);
+    TrialStatus { remaining_seconds: remaining, unlocked: state.unlocked }
+}
+
+#[tauri::command]
+fn unlock_app(app: tauri::AppHandle, code: String) -> bool {
+    if code == UNLOCK_CODE {
+        let mut state = load_state(&app);
+        state.unlocked = true;
+        save_state(&app, &state);
+        true
+    } else {
+        false
+    }
+}
 
 #[derive(Clone, Serialize)]
 struct MonitorInfo {
@@ -90,6 +164,8 @@ pub fn run() {
             open_cast,
             close_cast,
             send_cast_state,
+            get_trial_status,
+            unlock_app,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
