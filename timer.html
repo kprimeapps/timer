@@ -931,16 +931,25 @@ body.show-ui .controls { opacity: 1; }
 
 <div id="lock-overlay">
   <div class="lock-box">
-    <h2>Trial Expired</h2>
-    <p>Your 10-minute trial has ended. To unlock the full version, contact:</p>
-    <div class="contact-info">
-      <div>📧 kprimeconsider@gmail.com</div>
-      <div>📞 +233 544 343 586</div>
+    <div id="welcomeScreen">
+      <h2>Program Timer</h2>
+      <p style="margin-bottom:24px;">Welcome! Enter an unlock code to get started, or try the free 10-minute trial.</p>
+      <button class="btn-unlock" id="welcomeCodeBtn" style="margin-bottom:10px;">Enter Unlock Code</button>
+      <button class="btn-unlock" id="welcomeTrialBtn" style="background:var(--surface2);color:var(--muted);">Try Free &mdash; 10 min</button>
     </div>
-    <p style="margin-top:16px;font-size:13px;color:#667788">Enter your unlock code below:</p>
-    <input type="text" id="unlockInput" placeholder="Unlock code" autocomplete="off">
-    <button class="btn-unlock" id="unlockBtn">Unlock</button>
-    <div class="error" id="unlockError">Invalid unlock code</div>
+    <div id="unlockScreen" style="display:none;">
+      <h2>Trial Expired</h2>
+      <p>Your 10-minute trial has ended. To unlock the full version, contact:</p>
+      <div class="contact-info">
+        <div>📧 kprimeconsider@gmail.com</div>
+        <div>📞 +233 544 343 586</div>
+      </div>
+      <p style="margin-top:16px;font-size:13px;color:#667788">Enter your unlock code below:</p>
+      <input type="text" id="unlockInput" placeholder="Unlock code" autocomplete="off">
+      <button class="btn-unlock" id="unlockBtn">Unlock</button>
+      <div class="error" id="unlockError">Invalid unlock code</div>
+      <button class="btn-unlock" id="backToWelcomeBtn" style="margin-top:10px;background:transparent;color:var(--muted);font-size:12px;padding:8px;">Back</button>
+    </div>
   </div>
 </div>
 
@@ -1560,14 +1569,24 @@ async function checkLicense() {
   try {
     const status = await window.__TAURI__.core.invoke('get_trial_status');
     if (status.unlocked) {
+      document.getElementById('lock-overlay').classList.remove('active');
       if (trialInterval) { clearInterval(trialInterval); trialInterval = null; }
       return;
     }
+    if (status.showWelcome && status.remainingSeconds > 0) {
+      document.getElementById('welcomeScreen').style.display = '';
+      document.getElementById('unlockScreen').style.display = 'none';
+      document.getElementById('lock-overlay').classList.add('active');
+      return;
+    }
     if (status.remainingSeconds <= 0) {
+      document.getElementById('welcomeScreen').style.display = 'none';
+      document.getElementById('unlockScreen').style.display = '';
       document.getElementById('lock-overlay').classList.add('active');
       if (trialInterval) { clearInterval(trialInterval); trialInterval = null; }
       return;
     }
+    document.getElementById('lock-overlay').classList.remove('active');
     if (!trialInterval) {
       trialInterval = setInterval(checkLicense, 2000);
     }
@@ -1576,16 +1595,33 @@ async function checkLicense() {
   }
 }
 
+document.getElementById('welcomeCodeBtn').onclick = () => {
+  document.getElementById('welcomeScreen').style.display = 'none';
+  document.getElementById('unlockScreen').style.display = '';
+};
+document.getElementById('welcomeTrialBtn').onclick = async () => {
+  await window.__TAURI__.core.invoke('dismiss_welcome');
+  document.getElementById('lock-overlay').classList.remove('active');
+};
+document.getElementById('backToWelcomeBtn').onclick = () => {
+  document.getElementById('unlockScreen').style.display = 'none';
+  document.getElementById('welcomeScreen').style.display = '';
+  document.getElementById('unlockError').style.display = 'none';
+};
+
 document.getElementById('unlockBtn').onclick = async () => {
   const input = document.getElementById('unlockInput');
   const err = document.getElementById('unlockError');
   const code = input.value.trim();
   if (!code) return;
-  const ok = await window.__TAURI__.core.invoke('unlock_app', { code });
-  if (ok) {
+  try {
+    await window.__TAURI__.core.invoke('unlock_app', { code });
     document.getElementById('lock-overlay').classList.remove('active');
     err.style.display = 'none';
-  } else {
+    document.getElementById('welcomeScreen').style.display = '';
+    document.getElementById('unlockScreen').style.display = 'none';
+  } catch (e) {
+    err.textContent = e || 'Invalid unlock code';
     err.style.display = 'block';
     input.value = '';
     input.focus();
