@@ -3,7 +3,7 @@ use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
-use time::{Date, Month, OffsetDateTime, Time};
+use time::{Date, Duration, Month, OffsetDateTime, Time};
 
 const TRIAL_SECONDS: u64 = 600;
 const UNLOCK_CODE: &str = match option_env!("UNLOCK_CODE") {
@@ -22,16 +22,8 @@ fn hmac_hex(secret: &str, data: &str) -> String {
     hasher.finalize()[..8].iter().map(|b| format!("{:02x}", b)).collect()
 }
 
-fn datetime_from_yyyymmddhh(s: &str) -> Result<OffsetDateTime, String> {
-    if s.len() != 10 { return Err("bad length".into()); }
-    let y = s[0..4].parse::<i32>().map_err(|_| "bad year")?;
-    let m = s[4..6].parse::<u8>().map_err(|_| "bad month")?;
-    let d = s[6..8].parse::<u8>().map_err(|_| "bad day")?;
-    let h = s[8..10].parse::<u8>().map_err(|_| "bad hour")?;
-    let month = Month::try_from(m).map_err(|_| "bad month")?;
-    let date = Date::from_calendar_date(y, month, d).map_err(|_| "bad date")?;
-    let time = Time::from_hms(h, 0, 0).map_err(|_| "bad time")?;
-    Ok(date.with_time(time).assume_utc())
+fn parse_hex_byte(h: &str) -> Result<u8, String> {
+    u8::from_str_radix(h, 16).map_err(|_| "bad hex".into())
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -92,35 +84,39 @@ fn get_trial_status(app: tauri::AppHandle) -> TrialStatus {
 #[tauri::command]
 fn unlock_app(app: tauri::AppHandle, code: String) -> Result<String, String> {
     let parts: Vec<&str> = code.split('-').collect();
-    if parts.len() != 4 || parts[0] != "TIMER" {
-        return Err("Invalid code format. Use TIMER-YYMMDD-HH-XXXX.".into());
+    if parts.len() != 3 || parts[0].len() != 2 || parts[1].len() != 2 || parts[2].len() != 4 {
+        return Err("Use format MM-DD-XXXX".into());
     }
-    let date = parts[1];
-    let hour = parts[2];
-    let provided = parts[3];
-    if date.len() != 6 || hour.len() != 2 || provided.len() != 16 {
-        return Err("Invalid code format".into());
+    let mm_hex = parts[0];
+    let dd_hex = parts[1];
+    let provided = parts[2];
+    let mm_dec = parse_hex_byte(mm_hex)?;
+    let dd_dec = parse_hex_byte(dd_hex)?;
+    if mm_dec < 1 || mm_dec > 12 || dd_dec < 1 || dd_dec > 31 {
+        return Err("Invalid date".into());
     }
-    let data = format!("{}{}", date, hour);
-    let expected = hmac_hex(UNLOCK_CODE, &data);
-    if provided != expected {
-        return Err("Invalid unlock code".into());
-    }
-    let full = format!("20{}{}", date, hour);
-    let code_time = datetime_from_yyyymmddhh(&full)?;
     let now = OffsetDateTime::now_utc();
-    let diff = now - code_time;
-    if diff > time::Duration::hours(48) {
-        return Err("Code expired".into());
+    let month = Month::try_from(mm_dec).map_err(|_| "bad month")?;
+    let years = [now.year(), now.year() - 1];
+    for &year in &years {
+        let data = format!("{:04}{:02}{:02}", year, mm_dec, dd_dec);
+        let expected = &hmac_hex(UNLOCK_CODE, &data)[..4];
+        if expected == provided {
+            let code_date = Date::from_calendar_date(year, month, dd_dec)
+                .map_err(|_| "bad date")?;
+            let code_time = code_date.with_time(Time::from_hms(0, 0, 0).unwrap()).assume_utc();
+            let diff = now - code_time;
+            if diff >= Duration::hours(-1) && diff <= Duration::days(7) {
+                let mut state = load_state(&app);
+                state.unlocked = true;
+                state.show_welcome = false;
+                save_state(&app, &state);
+                return Ok("ok".into());
+            }
+            return Err("Code expired".into());
+        }
     }
-    if diff < time::Duration::hours(-1) {
-        return Err("Code not yet valid".into());
-    }
-    let mut state = load_state(&app);
-    state.unlocked = true;
-    state.show_welcome = false;
-    save_state(&app, &state);
-    Ok("ok".into())
+    Err("Invalid code".into())
 }
 
 #[tauri::command]
