@@ -26,6 +26,23 @@
   --mono: 'Space Mono', monospace;
   --sans: 'Outfit', sans-serif;
 }
+:root.light {
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --surface2: #e8ecf2;
+  --border: rgba(0,0,0,0.10);
+  --border-active: rgba(0,0,0,0.20);
+  --accent: #2563eb;
+  --accent-glow: rgba(37,99,235,0.12);
+  --accent2: #4f46e5;
+  --yellow: #d97706;
+  --red: #dc2626;
+  --green: #059669;
+  --text: #1e2028;
+  --muted: #7a8199;
+  --mono: 'Space Mono', monospace;
+  --sans: 'Outfit', sans-serif;
+}
 
 body {
   background: var(--bg);
@@ -831,6 +848,13 @@ body.show-ui .controls { opacity: 1; }
               </label>
             </div>
           </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px;">
+            <label style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin:0;">Light Theme</label>
+            <label class="toggle-switch">
+              <input type="checkbox" id="themeToggle">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            </label>
+          </div>
         </div>
 
         <div class="settings-row" style="flex-direction:column;gap:8px;">
@@ -938,13 +962,15 @@ body.show-ui .controls { opacity: 1; }
       <button class="btn-unlock" id="welcomeTrialBtn" style="background:var(--surface2);color:var(--muted);">Try Free &mdash; 10 min</button>
     </div>
     <div id="unlockScreen" style="display:none;">
-      <h2>Trial Expired</h2>
-      <p>Your 10-minute trial has ended. To unlock the full version, contact:</p>
-      <div class="contact-info">
-        <div>📧 kprimeconsider@gmail.com</div>
-        <div>📞 +233 544 343 586</div>
+      <h2 id="unlockHeading">Enter Unlock Code</h2>
+      <p id="unlockDesc">Enter your 8-character unlock code to get started.</p>
+      <div id="unlockExpiredInfo" style="display:none;">
+        <p>Your 10-minute trial has ended. To unlock the full version, contact:</p>
+        <div class="contact-info">
+          <div>📧 kprimeconsider@gmail.com</div>
+          <div>📞 +233 544 343 586</div>
+        </div>
       </div>
-      <p style="margin-top:16px;font-size:13px;color:#667788">Enter your unlock code below:</p>
       <input type="text" id="unlockInput" placeholder="e.g. 06-1a-a1b2" autocomplete="off">
       <button class="btn-unlock" id="unlockBtn">Unlock</button>
       <div class="error" id="unlockError">Invalid unlock code</div>
@@ -1030,7 +1056,8 @@ function saveStateToDB() {
     gapSeconds: SETTINGS.gapSeconds,
     manualMode: SETTINGS.manualMode,
     fontSize: fontSizeSlider.value,
-    showMs: msToggle.checked
+    showMs: msToggle.checked,
+    lightTheme: document.getElementById('themeToggle').checked
   };
   store.put(stateData, 'current_state');
 }
@@ -1056,7 +1083,7 @@ function loadStateFromDB() {
       }
       if (data.fontSize !== undefined) {
         fontSizeSlider.value = data.fontSize;
-        fontSizeVal.textContent = data.fontSize + 'vw';
+        fontSizeVal.textContent = data.fontSize;
         display.style.fontSize = data.fontSize + 'vw';
         msDisplay.style.fontSize = Math.max(4, Math.round(data.fontSize * 0.38)) + 'vw';
       }
@@ -1065,6 +1092,10 @@ function loadStateFromDB() {
         showMs = data.showMs;
         msDisplay.classList.toggle('ms-on', showMs);
       }
+      if (data.lightTheme !== undefined) {
+        document.getElementById('themeToggle').checked = data.lightTheme;
+        document.documentElement.classList.toggle('light', data.lightTheme);
+      }
     }
   };
 }
@@ -1072,7 +1103,7 @@ function loadStateFromDB() {
 // Font size slider
 fontSizeSlider.addEventListener('input', function() {
   const vw = +this.value;
-  fontSizeVal.textContent = vw + 'vw';
+  fontSizeVal.textContent = vw;
   display.style.fontSize = vw + 'vw';
   msDisplay.style.fontSize = Math.max(4, Math.round(vw * 0.38)) + 'vw';
   saveStateToDB();
@@ -1084,6 +1115,12 @@ msToggle.addEventListener('change', function() {
   msDisplay.classList.toggle('ms-on', showMs);
   if (!showMs) { clearInterval(msTimer); msTimer = null; msDisplay.textContent = '.00'; }
   else if (timer && !isPaused) startMsTimer();
+  saveStateToDB();
+});
+
+// Theme toggle
+document.getElementById('themeToggle').addEventListener('change', function() {
+  document.documentElement.classList.toggle('light', this.checked);
   saveStateToDB();
 });
 
@@ -1580,6 +1617,9 @@ async function checkLicense() {
       return;
     }
     if (status.remainingSeconds <= 0) {
+      document.getElementById('unlockHeading').textContent = 'Trial Expired';
+      document.getElementById('unlockDesc').textContent = '';
+      document.getElementById('unlockExpiredInfo').style.display = '';
       document.getElementById('welcomeScreen').style.display = 'none';
       document.getElementById('unlockScreen').style.display = '';
       document.getElementById('lock-overlay').classList.add('active');
@@ -1596,6 +1636,9 @@ async function checkLicense() {
 }
 
 document.getElementById('welcomeCodeBtn').onclick = () => {
+  document.getElementById('unlockHeading').textContent = 'Enter Unlock Code';
+  document.getElementById('unlockDesc').textContent = 'Enter your 8-character unlock code to get started.';
+  document.getElementById('unlockExpiredInfo').style.display = 'none';
   document.getElementById('welcomeScreen').style.display = 'none';
   document.getElementById('unlockScreen').style.display = '';
 };
