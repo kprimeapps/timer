@@ -329,6 +329,12 @@ input[type="text"]::placeholder, input[type="number"]::placeholder {
 .toggle-switch input:checked ~ .toggle-track { background:var(--accent-glow); border-color:rgba(59,130,246,0.4); }
 .toggle-switch input:checked ~ .toggle-track .toggle-thumb { transform:translateX(18px); background:var(--accent); }
 
+.mode-toggle { display:flex; gap:0; background:var(--surface2); border-radius:8px; overflow:hidden; border:1px solid var(--border); }
+.mode-option { flex:1; cursor:pointer; }
+.mode-option input { display:none; }
+.mode-option span { display:block; padding:7px 0; text-align:center; font-size:12px; font-weight:500; color:var(--muted); transition:all .2s; }
+.mode-option input:checked + span { background:var(--accent); color:#fff; }
+
 .timer-main-wrap {
   position: relative;
   display: flex;
@@ -812,6 +818,19 @@ body.show-ui .controls { opacity: 1; }
               <span class="toggle-track"><span class="toggle-thumb"></span></span>
             </label>
           </div>
+          <div class="setting-item" style="margin-top:4px;">
+            <label style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;display:block;">Mode</label>
+            <div class="mode-toggle">
+              <label class="mode-option">
+                <input type="radio" name="mode" value="auto" checked>
+                <span>Auto</span>
+              </label>
+              <label class="mode-option">
+                <input type="radio" name="mode" value="manual">
+                <span>Manual</span>
+              </label>
+            </div>
+          </div>
         </div>
 
         <div class="settings-row" style="flex-direction:column;gap:8px;">
@@ -887,7 +906,7 @@ body.show-ui .controls { opacity: 1; }
       <span id="pauseLabel">Pause</span>
     </button>
     <button class="ctrl-btn" id="skipBtn" title="Skip to next item">
-      Skip
+      <span id="skipLabel">Skip</span>
       <svg viewBox="0 0 16 16" fill="none"><path d="M5 3l6 5-6 5V3Z" fill="currentColor"/><line x1="13" y1="3" x2="13" y2="13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
     </button>
     <button class="ctrl-btn" id="resetBtn" title="Return to setup">
@@ -927,7 +946,7 @@ body.show-ui .controls { opacity: 1; }
 
 <script>
 try {
-const SETTINGS = { previewSeconds: 5, gapSeconds: 0 };
+const SETTINGS = { previewSeconds: 5, gapSeconds: 0, manualMode: false };
 let queue = [];
 let index = 0;
 let totalSeconds = 0;
@@ -964,6 +983,14 @@ const msToggle = document.getElementById('msToggle');
 const previewSecInput = document.getElementById('previewSec');
 const gapSecInput = document.getElementById('gapSec');
 const csvFileInput = document.getElementById('csvFileInput');
+const skipLabel = document.getElementById('skipLabel');
+
+// Mode toggle
+const modeRadios = document.querySelectorAll('input[name="mode"]');
+modeRadios.forEach(r => r.addEventListener('change', () => {
+  SETTINGS.manualMode = document.querySelector('input[name="mode"]:checked').value === 'manual';
+  skipLabel.textContent = SETTINGS.manualMode ? 'Next' : 'Skip';
+}));
 
 // ─── INDEXEDDB INITIALIZATION & STORAGE ───
 const DB_NAME = 'ProgramTimerDB';
@@ -992,6 +1019,7 @@ function saveStateToDB() {
     queue,
     previewSeconds: SETTINGS.previewSeconds,
     gapSeconds: SETTINGS.gapSeconds,
+    manualMode: SETTINGS.manualMode,
     fontSize: fontSizeSlider.value,
     showMs: msToggle.checked
   };
@@ -1010,6 +1038,13 @@ function loadStateFromDB() {
       if (Array.isArray(data.queue)) { queue = data.queue; renderQueue(); }
       if (data.previewSeconds !== undefined) { SETTINGS.previewSeconds = data.previewSeconds; previewSecInput.value = data.previewSeconds; }
       if (data.gapSeconds !== undefined) { SETTINGS.gapSeconds = data.gapSeconds; gapSecInput.value = data.gapSeconds; }
+      if (data.manualMode !== undefined) {
+        SETTINGS.manualMode = data.manualMode;
+        const val = data.manualMode ? 'manual' : 'auto';
+        const radio = document.querySelector(`input[name="mode"][value="${val}"]`);
+        if (radio) radio.checked = true;
+        skipLabel.textContent = data.manualMode ? 'Next' : 'Skip';
+      }
       if (data.fontSize !== undefined) {
         fontSizeSlider.value = data.fontSize;
         fontSizeVal.textContent = data.fontSize + 'vw';
@@ -1350,6 +1385,7 @@ function startCountdown() {
     totalSeconds--;
     msValue = 0;
     updateDisplay();
+    if (SETTINGS.manualMode) return;
     if (totalSeconds <= 0) {
       clearInterval(timer);
       clearInterval(msTimer);
@@ -1386,17 +1422,19 @@ function runGap() {
 
 // Display
 function updateDisplay() {
-  const m = Math.floor(totalSeconds / 60);
-  const s = totalSeconds % 60;
-  const timeStr = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  const abs = Math.abs(totalSeconds);
+  const neg = totalSeconds < 0;
+  const m = Math.floor(abs / 60);
+  const s = abs % 60;
+  const timeStr = (neg ? '-' : '') + `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
   display.textContent = timeStr;
   display.className = '';
-  if (totalSeconds <= 10) display.className = 'flash';
-  else if (totalSeconds <= 30) display.className = 'danger';
-  else if (totalSeconds <= 60) display.className = 'warn';
+  if (totalSeconds <= 10 && !neg) display.className = 'flash';
+  else if (totalSeconds <= 30 && !neg) display.className = 'danger';
+  else if (totalSeconds <= 60 && !neg) display.className = 'warn';
+  if (neg) display.className = 'danger';
 
-  // Progress bar
-  const pct = itemTotalSeconds > 0 ? (totalSeconds / itemTotalSeconds) * 100 : 100;
+  const pct = itemTotalSeconds > 0 && !neg ? (totalSeconds / itemTotalSeconds) * 100 : (neg ? 0 : 100);
   progressBar.style.width = pct + '%';
   progressBar.style.background = totalSeconds <= 30 ? '#ef4444' : totalSeconds <= 60 ? '#f59e0b' : '#3b82f6';
 
