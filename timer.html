@@ -268,7 +268,7 @@ input[type="text"]::placeholder, input[type="number"]::placeholder {
 
 .queue-item:hover { border-color: var(--border-active); }
 .queue-item.dragging { opacity: 0.4; }
-.queue-item.drag-over { border-color: var(--accent); background: var(--accent-glow); }
+.queue-item-wrap.drag-over .queue-item { border-color: var(--accent); background: var(--accent-glow); }
 
 .q-num {
   font-family: var(--mono);
@@ -299,6 +299,60 @@ input[type="text"]::placeholder, input[type="number"]::placeholder {
   padding: 24px 0;
   border: 1px dashed var(--border);
   border-radius: 10px;
+}
+
+.q-edit-input, .q-edit-mins {
+  font-family: var(--sans);
+  font-size: 13px;
+  background: var(--surface2);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 4px 8px;
+  outline: none;
+  width: auto;
+}
+.q-edit-mins {
+  width: 56px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.queue-insert {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+  border-radius: 6px;
+}
+.queue-item-wrap:hover .queue-insert,
+.queue-item-wrap .queue-insert.active {
+  opacity: 1;
+}
+.queue-insert:hover {
+  background: var(--accent-glow);
+}
+.queue-insert svg {
+  width: 16px;
+  height: 16px;
+  stroke: var(--muted);
+}
+.queue-insert:hover svg {
+  stroke: var(--accent);
+}
+.timer-seek-input {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  font-family: var(--mono);
+  text-align: center;
+  outline: none;
+  width: 100%;
+  caret-color: var(--accent);
 }
 
 /* Settings row */
@@ -907,7 +961,7 @@ body.show-ui .controls { opacity: 1; }
 
   <div class="timer-center">
     <div class="timer-main-wrap">
-      <div id="timerDisplay">00:00</div>
+      <div id="timerDisplay" title="Click to set time">00:00</div>
       <div id="msDisplay">.00</div>
     </div>
     <div class="current-label" id="currentLabel"></div>
@@ -1166,11 +1220,16 @@ function renderQueue() {
     return;
   }
   queueList.innerHTML = queue.map((x, i) => `
-    <div class="queue-item" draggable="true" data-i="${i}">
-      <span class="q-num">${String(i+1).padStart(2,'0')}</span>
-      <span class="q-label">${escapeHtml(x.label)}</span>
-      <span class="q-time">${formatDur(x.seconds)}</span>
-      <button class="btn-danger-ghost" data-del="${i}" title="Remove">✕</button>
+    <div class="queue-item-wrap" data-i="${i}">
+      <div class="queue-item" draggable="true" data-i="${i}">
+        <span class="q-num">${String(i+1).padStart(2,'0')}</span>
+        <span class="q-label" data-edit-label="${i}">${escapeHtml(x.label)}</span>
+        <span class="q-time" data-edit-time="${i}">${formatDur(x.seconds)}</span>
+        <button class="btn-danger-ghost" data-del="${i}" title="Remove">✕</button>
+      </div>
+      <div class="queue-insert" data-insert="${i}" title="Insert item after this">
+        <svg viewBox="0 0 16 16" fill="none"><line x1="8" y1="3" x2="8" y2="13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="3" y1="8" x2="13" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
     </div>
   `).join('');
 
@@ -1184,16 +1243,18 @@ function renderQueue() {
     };
   });
 
-  // Drag to reorder
-  queueList.querySelectorAll('.queue-item').forEach(el => {
-    el.addEventListener('dragstart', e => { dragSrc = +el.dataset.i; el.classList.add('dragging'); });
+  // Drag to reorder (on wrap elements)
+  queueList.querySelectorAll('.queue-item-wrap').forEach(wrap => {
+    const el = wrap.querySelector('.queue-item');
+    const i = +wrap.dataset.i;
+    el.addEventListener('dragstart', e => { dragSrc = i; el.classList.add('dragging'); });
     el.addEventListener('dragend', () => el.classList.remove('dragging'));
-    el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag-over'); });
-    el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
-    el.addEventListener('drop', e => {
+    wrap.addEventListener('dragover', e => { e.preventDefault(); wrap.classList.add('drag-over'); });
+    wrap.addEventListener('dragleave', () => wrap.classList.remove('drag-over'));
+    wrap.addEventListener('drop', e => {
       e.preventDefault();
-      el.classList.remove('drag-over');
-      const target = +el.dataset.i;
+      wrap.classList.remove('drag-over');
+      const target = i;
       if (dragSrc !== null && dragSrc !== target) {
         const [moved] = queue.splice(dragSrc, 1);
         queue.splice(target, 0, moved);
@@ -1201,6 +1262,87 @@ function renderQueue() {
         saveStateToDB();
       }
       dragSrc = null;
+    });
+  });
+
+  // Inline edit: label
+  queueList.querySelectorAll('[data-edit-label]').forEach(el => {
+    el.addEventListener('click', function() {
+      const i = +this.dataset.editLabel;
+      const orig = queue[i].label;
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = orig;
+      input.className = 'q-edit-input';
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { input.blur(); return; }
+        if (e.key === 'Escape') { input.value = orig; input.blur(); return; }
+        e.stopPropagation();
+      });
+      input.addEventListener('blur', () => {
+        const val = input.value.trim();
+        if (val && val !== orig) {
+          queue[i].label = val;
+          renderQueue();
+          saveStateToDB();
+        } else {
+          renderQueue();
+        }
+      });
+      input.addEventListener('click', e => e.stopPropagation());
+      this.replaceWith(input);
+      input.focus();
+      input.select();
+    });
+  });
+
+  // Inline edit: time
+  queueList.querySelectorAll('[data-edit-time]').forEach(el => {
+    el.addEventListener('click', function() {
+      const i = +this.dataset.editTime;
+      const origMins = Math.round(queue[i].seconds / 60);
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.value = origMins;
+      input.min = 0.25;
+      input.step = 0.25;
+      input.className = 'q-edit-mins';
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { input.blur(); return; }
+        if (e.key === 'Escape') { input.value = origMins; input.blur(); return; }
+        e.stopPropagation();
+      });
+      input.addEventListener('blur', () => {
+        const mins = parseFloat(input.value);
+        if (!isNaN(mins) && mins > 0 && mins !== origMins) {
+          queue[i].seconds = Math.round(mins * 60);
+          renderQueue();
+          saveStateToDB();
+        } else {
+          renderQueue();
+        }
+      });
+      input.addEventListener('click', e => e.stopPropagation());
+      this.replaceWith(input);
+      input.focus();
+      input.select();
+    });
+  });
+
+  // Insert between
+  queueList.querySelectorAll('[data-insert]').forEach(el => {
+    el.addEventListener('click', function() {
+      const i = +this.dataset.insert;
+      queue.splice(i + 1, 0, { label: '', seconds: 60 });
+      renderQueue();
+      saveStateToDB();
+      // Focus the newly inserted item's label for editing
+      const wraps = queueList.querySelectorAll('.queue-item-wrap');
+      const newWrap = wraps[i + 1];
+      if (newWrap) {
+        const labelEl = newWrap.querySelector('[data-edit-label]');
+        if (labelEl) labelEl.click();
+      }
     });
   });
 }
@@ -1474,6 +1616,7 @@ function updateDisplay() {
   const s = abs % 60;
   const timeStr = (neg ? '-' : '') + `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
   display.textContent = timeStr;
+  display.title = timeStr + ' \u2014 Click to set time';
   display.className = '';
   if (totalSeconds <= 10 && !neg) display.className = 'flash';
   else if (totalSeconds <= 30 && !neg) display.className = 'danger';
@@ -1496,6 +1639,65 @@ function updateDisplay() {
 
   sendCastState();
 }
+
+// ─── TIMER SEEK ───
+let seekInProgress = false;
+
+display.addEventListener('click', function() {
+  if (seekInProgress || !timer || totalSeconds === undefined) return;
+  const i = document.createElement('input');
+  i.type = 'text';
+  i.className = 'timer-seek-input';
+  i.value = display.textContent;
+  i.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      const parts = i.value.split(':');
+      if (parts.length === 2) {
+        const m = parseInt(parts[0], 10);
+        const s = parseInt(parts[1], 10);
+        if (!isNaN(m) && !isNaN(s)) {
+          totalSeconds = m * 60 + s;
+          if (SETTINGS.manualMode) {
+            itemTotalSeconds = Math.max(itemTotalSeconds, totalSeconds);
+          }
+          updateDisplay();
+          sendCastState();
+        }
+      }
+      seekInProgress = false;
+      i.remove();
+    }
+    if (e.key === 'Escape') {
+      seekInProgress = false;
+      i.remove();
+      updateDisplay();
+    }
+    e.stopPropagation();
+  });
+  i.addEventListener('blur', () => {
+    seekInProgress = false;
+    i.remove();
+    updateDisplay();
+  });
+  this.textContent = '';
+  this.appendChild(i);
+  seekInProgress = true;
+  i.focus();
+  i.select();
+});
+
+// Seek via progress bar click
+document.querySelector('.progress-bar-wrap').addEventListener('click', function(e) {
+  if (!timer || totalSeconds === undefined || seekInProgress) return;
+  const rect = this.getBoundingClientRect();
+  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  totalSeconds = Math.round(itemTotalSeconds * pct);
+  if (SETTINGS.manualMode) {
+    itemTotalSeconds = Math.max(itemTotalSeconds, totalSeconds);
+  }
+  updateDisplay();
+  sendCastState();
+});
 
 // Overlay
 function showOverlay(text, sub, countdown) {
@@ -1584,6 +1786,8 @@ document.getElementById('resetBtn').onclick = () => {
 
 // Keyboard shortcuts
 document.addEventListener('keydown', e => {
+  const tag = e.target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
   const timerActive = document.getElementById('timer-screen').classList.contains('active');
   const liveVisible = document.getElementById('liveBar').classList.contains('visible');
   if (!timerActive && !liveVisible) return;
