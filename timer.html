@@ -543,16 +543,31 @@ input[type="text"]::placeholder, input[type="number"]::placeholder {
   top: 0;
   left: 0;
   right: 0;
+  height: 16px;
+  background: transparent;
+  z-index: 10;
+  cursor: pointer;
+  padding: 6px 0;
+}
+.progress-bar-wrap::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 6px;
   height: 3px;
   background: rgba(255,255,255,0.06);
-  z-index: 10;
+  border-radius: 2px;
 }
-
 .progress-bar {
-  height: 100%;
+  position: absolute;
+  top: 6px;
+  left: 0;
+  height: 3px;
   background: var(--accent);
   transition: width 1s linear;
   width: 100%;
+  border-radius: 2px;
 }
 
 /* Top info bar */
@@ -1237,7 +1252,9 @@ function renderQueue() {
   queueList.querySelectorAll('[data-del]').forEach(btn => {
     btn.onclick = (e) => { 
       e.stopPropagation(); 
-      queue.splice(+btn.dataset.del, 1); 
+      const delIdx = +btn.dataset.del;
+      queue.splice(delIdx, 1);
+      if (delIdx < index) index--;
       renderQueue(); 
       saveStateToDB();
     };
@@ -1338,12 +1355,16 @@ function renderQueue() {
   queueList.querySelectorAll('[data-insert]').forEach(el => {
     el.addEventListener('click', function() {
       const i = +this.dataset.insert;
-      queue.splice(i + 1, 0, { label: '', seconds: 60 });
+      const insertAt = i + 1;
+      queue.splice(insertAt, 0, { label: '', seconds: 60 });
+      if (insertAt <= index) index++;
       renderQueue();
       saveStateToDB();
+      // Rebuild pills if timer is running to stay in sync
+      if (timer) buildPills();
       // Focus the newly inserted item's label for editing
       const wraps = queueList.querySelectorAll('.queue-item-wrap');
-      const newWrap = wraps[i + 1];
+      const newWrap = wraps[insertAt];
       if (newWrap) {
         const labelEl = newWrap.querySelector('[data-edit-label]');
         if (labelEl) labelEl.click();
