@@ -465,18 +465,30 @@ input[type="text"]::placeholder, input[type="number"]::placeholder {
 .live-info .live-timer.flash { animation: flash-live 0.8s infinite; color: var(--red); }
 .live-progress {
   width: 100%;
-  height: 3px;
-  background: rgba(255,255,255,0.06);
-  border-radius: 2px;
-  margin-top: 6px;
-  overflow: hidden;
+  height: 16px;
+  padding: 5px 0;
+  cursor: pointer;
+  position: relative;
 }
 .live-progress .live-bar-fill {
-  height: 100%;
+  height: 6px;
   background: var(--accent);
-  border-radius: 2px;
+  border-radius: 3px;
   transition: width 0.5s linear;
   width: 100%;
+  pointer-events: none;
+  position: relative;
+  z-index: 1;
+}
+.live-progress .live-bar-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 5px;
+  height: 6px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px;
+  pointer-events: none;
 }
 .live-actions {
   display: flex;
@@ -1015,7 +1027,7 @@ body.show-ui .controls { opacity: 1; }
       <div class="live-info">
         <div class="live-label" id="liveLabel">-</div>
         <div class="live-timer" id="liveTimer">00:00</div>
-        <div class="live-progress"><div class="live-bar-fill" id="liveBarFill"></div></div>
+        <div class="live-progress"><div class="live-bar-track"></div><div class="live-bar-fill" id="liveBarFill"></div></div>
       </div>
       <div class="live-actions">
         <button class="ctrl-btn" id="livePrevBtn" title="Previous item">&#9664;</button>
