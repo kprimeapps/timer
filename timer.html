@@ -1315,7 +1315,12 @@ function renderQueue() {
       input.addEventListener('blur', () => {
         const mins = parseFloat(input.value);
         if (!isNaN(mins) && mins > 0 && mins !== origMins) {
-          queue[i].seconds = Math.round(mins * 60);
+          const newSecs = Math.round(mins * 60);
+          queue[i].seconds = newSecs;
+          if (i === index && timer) {
+            totalSeconds = newSecs;
+            itemTotalSeconds = newSecs;
+          }
           renderQueue();
           saveStateToDB();
         } else {
@@ -1570,6 +1575,7 @@ function startCountdown() {
 
   timer = setInterval(() => {
     if (isPaused) return;
+    if (seekInProgress) return;
     totalSeconds--;
     msValue = 0;
     updateDisplay();
@@ -1615,8 +1621,10 @@ function updateDisplay() {
   const m = Math.floor(abs / 60);
   const s = abs % 60;
   const timeStr = (neg ? '-' : '') + `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-  display.textContent = timeStr;
-  display.title = timeStr + ' \u2014 Click to set time';
+  if (!seekInProgress) {
+    display.textContent = timeStr;
+    display.title = timeStr + ' \u2014 Click to set time';
+  }
   display.className = '';
   if (totalSeconds <= 10 && !neg) display.className = 'flash';
   else if (totalSeconds <= 30 && !neg) display.className = 'danger';
@@ -1645,13 +1653,22 @@ let seekInProgress = false;
 
 display.addEventListener('click', function() {
   if (seekInProgress || !timer || totalSeconds === undefined) return;
-  const i = document.createElement('input');
-  i.type = 'text';
-  i.className = 'timer-seek-input';
-  i.value = display.textContent;
-  i.addEventListener('keydown', e => {
+  const inp = document.createElement('input');
+  inp.type = 'text';
+  inp.className = 'timer-seek-input';
+  inp.value = display.textContent;
+  let done = false;
+  function finish(restore) {
+    if (done) return;
+    done = true;
+    seekInProgress = false;
+    if (inp.parentNode) inp.remove();
+    if (restore) updateDisplay();
+  }
+  inp.addEventListener('keydown', e => {
     if (e.key === 'Enter') {
-      const parts = i.value.split(':');
+      e.preventDefault();
+      const parts = inp.value.split(':');
       if (parts.length === 2) {
         const m = parseInt(parts[0], 10);
         const s = parseInt(parts[1], 10);
@@ -1660,30 +1677,28 @@ display.addEventListener('click', function() {
           if (SETTINGS.manualMode) {
             itemTotalSeconds = Math.max(itemTotalSeconds, totalSeconds);
           }
+          finish(false);
           updateDisplay();
           sendCastState();
+          return;
         }
       }
-      seekInProgress = false;
-      i.remove();
+      finish(true);
     }
     if (e.key === 'Escape') {
-      seekInProgress = false;
-      i.remove();
-      updateDisplay();
+      finish(true);
     }
     e.stopPropagation();
   });
-  i.addEventListener('blur', () => {
-    seekInProgress = false;
-    i.remove();
-    updateDisplay();
+  inp.addEventListener('blur', () => {
+    finish(true);
   });
+  inp.addEventListener('click', e => e.stopPropagation());
   this.textContent = '';
-  this.appendChild(i);
+  this.appendChild(inp);
   seekInProgress = true;
-  i.focus();
-  i.select();
+  inp.focus();
+  inp.select();
 });
 
 // Seek via progress bar click
