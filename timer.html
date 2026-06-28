@@ -343,18 +343,6 @@ input[type="text"]::placeholder, input[type="number"]::placeholder {
 .queue-insert:hover svg {
   stroke: var(--accent);
 }
-.timer-seek-input {
-  background: transparent;
-  border: none;
-  color: inherit;
-  font: inherit;
-  font-family: var(--mono);
-  text-align: center;
-  outline: none;
-  width: 100%;
-  caret-color: var(--accent);
-}
-
 /* Settings row */
 .settings-row {
   background: var(--surface);
@@ -465,9 +453,11 @@ input[type="text"]::placeholder, input[type="number"]::placeholder {
 }
 .live-info .live-timer {
   font-family: var(--mono);
-  font-size: 26px;
+  font-size: 32px;
   font-weight: 700;
-  color: var(--accent);
+  letter-spacing: -0.02em;
+  color: var(--text);
+  cursor: pointer;
 }
 .live-info .live-timer.warn { color: var(--yellow); }
 .live-info .live-timer.danger { color: var(--red); }
@@ -537,38 +527,111 @@ input[type="text"]::placeholder, input[type="number"]::placeholder {
 
 #timer-screen.active { display: flex; }
 
+/* Seek overlay */
+.seek-overlay {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--surface);
+  border: 1px solid var(--border-active);
+  border-radius: 14px;
+  padding: 20px 24px;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  z-index: 200;
+  min-width: 220px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+}
+.seek-overlay.visible { display: flex; }
+.seek-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.seek-input {
+  font-family: var(--mono);
+  font-size: 28px;
+  width: 120px;
+  text-align: center;
+  background: var(--surface2);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 6px;
+  outline: none;
+}
+.seek-hints {
+  display: flex;
+  gap: 6px;
+}
+.seek-hints span {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--surface2);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.seek-hints span:hover {
+  background: var(--accent-glow);
+  color: var(--accent);
+}
+
 /* Progress bar */
 .progress-bar-wrap {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 16px;
-  background: transparent;
-  z-index: 10;
+  height: 28px;
+  z-index: 20;
   cursor: pointer;
-  padding: 6px 0;
 }
-.progress-bar-wrap::before {
-  content: '';
+.progress-bar-track {
   position: absolute;
   left: 0;
   right: 0;
-  top: 6px;
-  height: 3px;
-  background: rgba(255,255,255,0.06);
+  top: 12px;
+  height: 4px;
+  background: rgba(255,255,255,0.08);
   border-radius: 2px;
+  pointer-events: none;
 }
 .progress-bar {
   position: absolute;
-  top: 6px;
+  top: 12px;
   left: 0;
-  height: 3px;
+  height: 4px;
   background: var(--accent);
   transition: width 1s linear;
-  width: 100%;
   border-radius: 2px;
+  pointer-events: none;
 }
+.progress-bar-wrap::after {
+  content: '⇤ click to seek ⇥';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--sans);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.progress-bar-wrap:hover::after { opacity: 1; }
 
 /* Top info bar */
 .top-bar {
@@ -626,12 +689,13 @@ body.show-ui .top-bar { opacity: 1; }
 
 #timerDisplay {
   font-family: var(--mono);
-  font-size: clamp(80px, 22vw, 220px);
+  font-size: clamp(100px, 26vw, 300px);
   font-weight: 700;
   letter-spacing: -0.03em;
-  color: var(--text);
   line-height: 1;
+  color: var(--text);
   transition: color 0.5s;
+  cursor: pointer;
 }
 
 #timerDisplay.warn { color: var(--yellow); }
@@ -966,6 +1030,7 @@ body.show-ui .controls { opacity: 1; }
 <div id="timer-screen">
 
   <div class="progress-bar-wrap">
+    <div class="progress-bar-track"></div>
     <div class="progress-bar" id="progressBar"></div>
   </div>
 
@@ -976,7 +1041,7 @@ body.show-ui .controls { opacity: 1; }
 
   <div class="timer-center">
     <div class="timer-main-wrap">
-      <div id="timerDisplay" title="Click to set time">00:00</div>
+      <div id="timerDisplay">00:00</div>
       <div id="msDisplay">.00</div>
     </div>
     <div class="current-label" id="currentLabel"></div>
@@ -1020,6 +1085,17 @@ body.show-ui .controls { opacity: 1; }
   <button class="btn btn-launch" onclick="location.reload()" style="padding:12px 32px;font-size:15px;border-radius:10px;border:none;cursor:pointer">
     Start New Program
   </button>
+</div>
+
+<div id="seekOverlay" class="seek-overlay">
+  <span class="seek-label">Jump to (MM:SS)</span>
+  <input type="text" id="seekInput" class="seek-input" placeholder="MM:SS" autocomplete="off">
+  <div class="seek-hints">
+    <span data-seek="60">+1m</span>
+    <span data-seek="-60">&minus;1m</span>
+    <span data-seek="30">+30s</span>
+    <span data-seek="-30">&minus;30s</span>
+  </div>
 </div>
 
 <div id="lock-overlay">
@@ -1596,7 +1672,6 @@ function startCountdown() {
 
   timer = setInterval(() => {
     if (isPaused) return;
-    if (seekInProgress) return;
     totalSeconds--;
     msValue = 0;
     updateDisplay();
@@ -1642,10 +1717,7 @@ function updateDisplay() {
   const m = Math.floor(abs / 60);
   const s = abs % 60;
   const timeStr = (neg ? '-' : '') + `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-  if (!seekInProgress) {
-    display.textContent = timeStr;
-    display.title = timeStr + ' \u2014 Click to set time';
-  }
+  display.textContent = timeStr;
   display.className = '';
   if (totalSeconds <= 10 && !neg) display.className = 'flash';
   else if (totalSeconds <= 30 && !neg) display.className = 'danger';
@@ -1670,70 +1742,103 @@ function updateDisplay() {
 }
 
 // ─── TIMER SEEK ───
-let seekInProgress = false;
+const seekOverlay = document.getElementById('seekOverlay');
+const seekInput = document.getElementById('seekInput');
 
-display.addEventListener('click', function() {
-  if (seekInProgress || !timer || totalSeconds === undefined) return;
-  const inp = document.createElement('input');
-  inp.type = 'text';
-  inp.className = 'timer-seek-input';
-  inp.value = display.textContent;
-  let done = false;
-  function finish(restore) {
-    if (done) return;
-    done = true;
-    seekInProgress = false;
-    if (inp.parentNode) inp.remove();
-    if (restore) updateDisplay();
+function applySeek(m) {
+  const s = Math.round(m * 60);
+  totalSeconds = Math.max(0, s);
+  if (SETTINGS.manualMode) {
+    itemTotalSeconds = Math.max(itemTotalSeconds, totalSeconds);
   }
-  inp.addEventListener('keydown', e => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const parts = inp.value.split(':');
-      if (parts.length === 2) {
-        const m = parseInt(parts[0], 10);
-        const s = parseInt(parts[1], 10);
-        if (!isNaN(m) && !isNaN(s)) {
-          totalSeconds = m * 60 + s;
-          if (SETTINGS.manualMode) {
-            itemTotalSeconds = Math.max(itemTotalSeconds, totalSeconds);
-          }
-          finish(false);
-          updateDisplay();
-          sendCastState();
-          return;
-        }
-      }
-      finish(true);
+  seekOverlay.classList.remove('visible');
+  updateDisplay();
+  sendCastState();
+}
+
+function seekMMSS(str) {
+  const parts = str.split(':');
+  if (parts.length === 2) {
+    const m = parseInt(parts[0], 10);
+    const s = parseInt(parts[1], 10);
+    if (!isNaN(m) && !isNaN(s) && m >= 0 && s >= 0) {
+      applySeek(m + s / 60);
+      return true;
     }
-    if (e.key === 'Escape') {
-      finish(true);
-    }
-    e.stopPropagation();
-  });
-  inp.addEventListener('blur', () => {
-    finish(true);
-  });
-  inp.addEventListener('click', e => e.stopPropagation());
-  this.textContent = '';
-  this.appendChild(inp);
-  seekInProgress = true;
-  inp.focus();
-  inp.select();
+  }
+  return false;
+}
+
+function openSeek() {
+  if (!timer || totalSeconds === undefined) return;
+  seekInput.value = display.textContent;
+  seekOverlay.classList.add('visible');
+  seekInput.focus();
+  seekInput.select();
+}
+
+function closeSeek() {
+  seekOverlay.classList.remove('visible');
+}
+
+seekInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    if (seekMMSS(seekInput.value)) return;
+  }
+  if (e.key === 'Escape') {
+    closeSeek();
+  }
+  e.stopPropagation();
 });
+
+seekInput.addEventListener('blur', () => {
+  // Small delay so hint clicks register before overlay hides
+  setTimeout(() => { if (!seekOverlay.contains(document.activeElement)) closeSeek(); }, 150);
+});
+
+// Seek hints
+seekOverlay.querySelectorAll('[data-seek]').forEach(el => {
+  el.addEventListener('click', () => {
+    const delta = +el.dataset.seek;
+    applySeek(totalSeconds / 60 + delta / 60);
+  });
+});
+
+// Open seek from timer display or live timer
+display.addEventListener('click', openSeek);
+const liveTimerEl = document.getElementById('liveTimer');
+if (liveTimerEl) liveTimerEl.addEventListener('click', openSeek);
 
 // Seek via progress bar click
 document.querySelector('.progress-bar-wrap').addEventListener('click', function(e) {
-  if (!timer || totalSeconds === undefined || seekInProgress) return;
+  if (!timer || totalSeconds === undefined) return;
   const rect = this.getBoundingClientRect();
   const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
   totalSeconds = Math.round(itemTotalSeconds * pct);
+  if (totalSeconds < 0) totalSeconds = 0;
   if (SETTINGS.manualMode) {
     itemTotalSeconds = Math.max(itemTotalSeconds, totalSeconds);
   }
   updateDisplay();
   sendCastState();
 });
+
+// Seek via live bar progress bar click
+const liveBarFill = document.getElementById('liveBarFill');
+if (liveBarFill) {
+  liveBarFill.parentElement.addEventListener('click', function(e) {
+    if (!timer || totalSeconds === undefined) return;
+    const rect = this.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    totalSeconds = Math.round(itemTotalSeconds * pct);
+    if (totalSeconds < 0) totalSeconds = 0;
+    if (SETTINGS.manualMode) {
+      itemTotalSeconds = Math.max(itemTotalSeconds, totalSeconds);
+    }
+    updateDisplay();
+    sendCastState();
+  });
+}
 
 // Overlay
 function showOverlay(text, sub, countdown) {
@@ -1972,7 +2077,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100dv
 .pill{width:12px;height:12px;border-radius:50%;background:rgba(255,255,255,0.15);}
 .pill.done{background:var(--green);}
 .pill.active{background:var(--accent);transform:scale(1.4);}
-#timerDisplay{font-family:var(--mono);font-size:clamp(100px,26vw,300px);font-weight:700;letter-spacing:-0.03em;line-height:1;color:var(--text);transition:color .5s;}
+#timerDisplay{font-family:var(--mono);font-size:clamp(100px,26vw,300px);font-weight:700;letter-spacing:-0.03em;line-height:1;color:var(--text);transition:color .5s;cursor:pointer;}
 #timerDisplay.warn{color:var(--yellow);}
 #timerDisplay.danger{color:var(--red);}
 @keyframes flash{0%,100%{opacity:1}50%{opacity:.25}}
