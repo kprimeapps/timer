@@ -1217,6 +1217,7 @@ function saveStateToDB() {
     lightTheme: document.getElementById('themeToggle').checked
   };
   store.put(stateData, 'current_state');
+  broadcastTimerState();
 }
 
 function loadStateFromDB() {
@@ -1681,6 +1682,7 @@ function startCountdown() {
   clearInterval(msTimer);
   isPaused = false;
   updatePauseBtn();
+  startBroadcastInterval();
 
   timer = setInterval(() => {
     if (isPaused) return;
@@ -1873,6 +1875,7 @@ function hideOverlay() {
 // Complete
 function showComplete() {
   releaseWakeLock();
+  stopBroadcastInterval();
   const liveBar = document.getElementById('liveBar');
   if (liveBar && liveBar.classList.contains('visible')) {
     document.getElementById('liveLabel').textContent = 'Program Complete!';
@@ -1884,6 +1887,7 @@ function showComplete() {
   document.getElementById('timer-screen').classList.remove('active');
   document.getElementById('complete-screen').classList.add('active');
   sendCastState();
+  broadcastTimerState();
 }
 
 // Pause / Resume
@@ -1894,6 +1898,7 @@ function togglePause() {
   if (!isPaused && showMs && timer) startMsTimer();
   else if (isPaused) { clearInterval(msTimer); msTimer = null; }
   sendCastState();
+  broadcastTimerState();
 }
 
 function updatePauseBtn() {
@@ -2213,6 +2218,195 @@ function sendCastState() {
 }
 
 function sendCastPills(pillStates) { sendCastState(); }
+
+// ─── MOBILE REMOTE (WebSocket) ───
+let _broadcastThrottle = 0;
+
+function broadcastTimerState() {
+  if (!isTauri()) return;
+  const now = Date.now();
+  if (now - _broadcastThrottle < 400) return;
+  _broadcastThrottle = now;
+  const pillStates = [];
+  queuePills.querySelectorAll('.q-pill').forEach((p, i) => {
+    pillStates.push(i < index ? 'done' : i === index ? 'active' : 'upcoming');
+  });
+  const completeActive = document.getElementById('complete-screen').classList.contains('active');
+  window.__TAURI__.core.invoke('broadcast_state', {
+    state: JSON.stringify({
+      type: 'state',
+      queue: queue,
+      index: index,
+      totalSeconds: totalSeconds,
+      itemTotalSeconds: itemTotalSeconds,
+      isPaused: isPaused,
+      running: !!timer,
+      mode: SETTINGS.manualMode ? 'manual' : 'auto',
+      previewSeconds: SETTINGS.previewSeconds,
+      gapSeconds: SETTINGS.gapSeconds,
+      itemLabel: currentLabel.textContent,
+      timerDisplay: display.textContent,
+      complete: completeActive,
+      pills: pillStates
+    })
+  });
+}
+
+// Start a separate broadcast interval (independent from display timer)
+let _broadcastInterval = null;
+function startBroadcastInterval() {
+  stopBroadcastInterval();
+  _broadcastInterval = setInterval(() => broadcastTimerState(), 500);
+}
+function stopBroadcastInterval() {
+  if (_broadcastInterval) { clearInterval(_broadcastInterval); _broadcastInterval = null; }
+}
+
+// Listen for mobile commands
+if (isTauri()) {
+  window.__TAURI__.event.listen('mobile-command', event => {
+    try {
+      const cmd = JSON.parse(event.payload);
+      switch (cmd.type) {
+        case 'request_state':
+          // Force broadcast with no throttle
+          _broadcastThrottle = 0;
+          broadcastTimerState();
+          break;
+        case 'pause':
+          if (!isPaused) togglePause();
+          break;
+        case 'resume':
+          if (isPaused) togglePause();
+          break;
+        case 'toggle_pause':
+          togglePause();
+          break;
+        case 'seek': {
+          const parts = (cmd.value || '').split(':');
+          if (parts.length === 2) {
+            const m = parseInt(parts[0], 10);
+            const s = parseInt(parts[1], 10);
+            if (!isNaN(m) && !isNaN(s)) {
+              totalSeconds = m * 60 + s;
+              if (totalSeconds < 0) totalSeconds = 0;
+              if (SETTINGS.manualMode) {
+                itemTotalSeconds = Math.max(itemTotalSeconds, totalSeconds);
+              }
+              updateDisplay();
+              sendCastState();
+            }
+          }
+          break;
+        }
+        case 'skip':
+          if (!overlay.classList.contains('visible')) {
+            clearInterval(timer);
+            clearInterval(msTimer); msTimer = null;
+            if (index < queue.length - 1) { index++; }
+            currentLabel.classList.remove('visible');
+            runPreview();
+          }
+          break;
+        case 'prev':
+          if (index > 0) {
+            clearInterval(timer);
+            clearInterval(msTimer); msTimer = null;
+            index--;
+            currentLabel.classList.remove('visible');
+            runPreview();
+          }
+          break;
+        case 'queue_edit':
+          handleMobileQueueEdit(cmd);
+          break;
+        case 'reset':
+          stopBroadcastInterval();
+          clearInterval(timer);
+          clearInterval(msTimer); msTimer = null;
+          index = 0;
+          queue = [];
+          isPaused = false;
+          totalSeconds = 0;
+          itemTotalSeconds = 0;
+          releaseWakeLock();
+          document.getElementById('timer-screen').classList.remove('active');
+          document.getElementById('complete-screen').classList.remove('active');
+          document.getElementById('setup').style.display = 'flex';
+          renderQueue();
+          updateDisplay();
+          saveStateToDB();
+          broadcastTimerState();
+          sendCastState();
+          break;
+      }
+    } catch(e) {
+      console.error('mobile command error:', e);
+    }
+  });
+}
+
+function handleMobileQueueEdit(cmd) {
+  switch (cmd.action) {
+    case 'add':
+      if (cmd.label && cmd.seconds > 0) {
+        queue.push({ label: cmd.label, seconds: cmd.seconds });
+        renderQueue();
+        saveStateToDB();
+        if (timer) buildPills();
+        broadcastTimerState();
+      }
+      break;
+    case 'delete':
+      if (cmd.index >= 0 && cmd.index < queue.length) {
+        if (cmd.index < index) index--;
+        queue.splice(cmd.index, 1);
+        renderQueue();
+        saveStateToDB();
+        if (timer) buildPills();
+        broadcastTimerState();
+      }
+      break;
+    case 'update':
+      if (cmd.index >= 0 && cmd.index < queue.length) {
+        if (cmd.label !== undefined) queue[cmd.index].label = cmd.label;
+        if (cmd.seconds !== undefined && cmd.seconds > 0) {
+          queue[cmd.index].seconds = cmd.seconds;
+          if (cmd.index === index && timer) {
+            totalSeconds = cmd.seconds;
+            itemTotalSeconds = cmd.seconds;
+          }
+        }
+        renderQueue();
+        saveStateToDB();
+        broadcastTimerState();
+      }
+      break;
+    case 'reorder':
+      if (cmd.from >= 0 && cmd.to >= 0 && cmd.from < queue.length && cmd.to < queue.length) {
+        const [moved] = queue.splice(cmd.from, 1);
+        queue.splice(cmd.to, 0, moved);
+        renderQueue();
+        saveStateToDB();
+        if (timer) buildPills();
+        broadcastTimerState();
+      }
+      break;
+  }
+}
+
+// Show remote URL in settings
+if (isTauri()) {
+  window.__TAURI__.core.invoke('get_remote_url').then(url => {
+    const el = document.createElement('div');
+    el.style.cssText = 'margin-top:8px;font-size:11px;color:var(--muted);text-align:center;padding:6px 10px;background:var(--surface2);border-radius:8px;word-break:break-all';
+    el.textContent = 'Remote: ' + url;
+    const sidebar = document.querySelector('.setup-side .settings-row');
+    if (sidebar && sidebar.parentNode) {
+      sidebar.parentNode.insertBefore(el, sidebar.nextSibling);
+    }
+  });
+}
 
 function openCastWindow() {
   if (isTauri()) {

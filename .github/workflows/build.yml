@@ -1,30 +1,50 @@
-name: Build Windows Portable
-
+name: Build
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+env:
+  UNLOCK_CODE: ${{ secrets.UNLOCK_CODE }}
 
 jobs:
-  build:
-    runs-on: windows-latest
-
+  macos:
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Build
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2"
+      - run: cargo tauri build --bundles dmg
+        working-directory: src-tauri
         env:
           UNLOCK_CODE: ${{ secrets.UNLOCK_CODE }}
-        run: npx @tauri-apps/cli@latest build --ci
-
       - uses: actions/upload-artifact@v4
         with:
-          name: ProgramTimer-Windows
-          path: src-tauri/target/release/program-timer.exe
+          name: Program-Timer-macOS
+          path: src-tauri/target/release/bundle/dmg/*.dmg
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2"
+      - name: Build
+        run: cargo tauri build --bundles none
+        working-directory: src-tauri
+        env:
+          UNLOCK_CODE: ${{ secrets.UNLOCK_CODE }}
+      - name: Package portable exe
+        run: |
+          mkdir dist
+          copy target\release\program-timer.exe dist\
+        shell: cmd
+        working-directory: src-tauri
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Program-Timer-Windows
+          path: src-tauri/dist/

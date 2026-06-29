@@ -6,7 +6,7 @@
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
     "beforeDevCommand": "",
-    "beforeBuildCommand": "mkdir -p dist && cp timer.html receiver.html dist/"
+    "beforeBuildCommand": "mkdir -p dist && cp timer.html receiver.html android.html dist/"
   },
   "app": {
     "withGlobalTauri": true,

@@ -1,0 +1,5 @@
+{
+  "build": {
+    "beforeBuildCommand": "if not exist dist mkdir dist && copy /y timer.html dist\\ && copy /y receiver.html dist\\ && copy /y android.html dist\\"
+  }
+}

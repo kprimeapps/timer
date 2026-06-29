@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>Program Timer Remote</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0a0c10;--surface:#12151c;--surface2:#1a1f2e;--border:rgba(255,255,255,0.08);--accent:#3b82f6;--accent-glow:rgba(59,130,246,0.15);--yellow:#f59e0b;--red:#ef4444;--green:#10b981;--text:#f0f2f8;--muted:#7a8199;--mono:'Space Mono',monospace;--sans:'Outfit',sans-serif}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);padding:16px;min-height:100dvh;user-select:none;-webkit-user-select:none}
+#setup{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:80dvh;gap:14px;text-align:center}
+#setup .icon{width:48px;height:48px;border:3px solid var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--accent)}
+#setup h2{font-size:18px;font-weight:500;color:var(--text)}
+#setup p{font-size:13px;color:var(--muted);max-width:280px;line-height:1.5}
+#setup .ip-form{display:flex;flex-direction:column;gap:8px;width:100%;max-width:260px}
+#setup .ip-form input{font-family:var(--mono);font-size:16px;text-align:center;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;outline:none}
+#setup .ip-form input:focus{border-color:var(--accent)}
+#setup .ip-form button{background:var(--accent);border:none;border-radius:8px;color:#fff;padding:10px;font-size:15px;font-weight:600;font-family:var(--sans);cursor:pointer}
+#setup .ip-form button:active{opacity:.8}
+#disconnected{display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;margin-top:40px}
+#disconnected p{font-size:12px;color:var(--muted)}
+#app{display:none;flex-direction:column;gap:16px;max-width:500px;margin:0 auto}
+.conn-badge{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--green);text-align:center;padding:4px 0}
+.timer-section{text-align:center;padding:12px 0}
+.timer-label{font-size:14px;font-weight:500;color:var(--text);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.timer-display{font-family:var(--mono);font-size:clamp(54px,14vw,90px);font-weight:700;letter-spacing:-0.03em;line-height:1.1;color:var(--text)}
+.timer-display.warn{color:var(--yellow)}
+.timer-display.danger{color:var(--red)}
+.timer-display.flash{animation:flash .8s infinite;color:var(--red)}
+@keyframes flash{0%,100%{opacity:1}50%{opacity:.3}}
+.timer-paused{font-size:13px;font-weight:600;color:var(--yellow);margin-top:4px;display:none}
+.progress-wrap{width:100%;height:20px;padding:7px 0;cursor:pointer;position:relative}
+.progress-track{position:absolute;left:0;right:0;top:7px;height:6px;background:rgba(255,255,255,0.06);border-radius:3px;pointer-events:none}
+.progress-fill{position:absolute;top:7px;left:0;height:6px;background:var(--accent);border-radius:3px;transition:width .5s linear;pointer-events:none}
+.controls{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.ctrl-btn{background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:10px 18px;font-size:14px;font-weight:500;font-family:var(--sans);cursor:pointer;transition:background .15s;flex:1;min-width:60px;text-align:center}
+.ctrl-btn:active{background:var(--accent-glow)}
+.ctrl-btn.pause{background:rgba(16,185,129,0.12);border-color:rgba(16,185,129,0.25);color:var(--green)}
+.ctrl-btn.pause.active{background:rgba(245,158,11,0.12);border-color:rgba(245,158,11,0.25);color:var(--yellow)}
+.ctrl-btn.skip{color:var(--accent)}
+.ctrl-btn.prev{color:var(--muted)}
+.seek-row{display:flex;gap:6px;align-items:center}
+.seek-input{flex:1;font-family:var(--mono);font-size:18px;text-align:center;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px;outline:none;min-width:0}
+.seek-input:focus{border-color:var(--accent)}
+.seek-go{background:var(--accent);border:none;border-radius:8px;color:#fff;padding:8px 14px;font-size:14px;font-weight:600;font-family:var(--sans);cursor:pointer;white-space:nowrap}
+.queue-section{margin-top:4px}
+.queue-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.queue-header h3{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted)}
+.queue-count{font-size:11px;color:var(--muted);font-family:var(--mono)}
+.queue-list{display:flex;flex-direction:column;gap:4px}
+.queue-item{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;transition:border-color .2s}
+.queue-item.active{border-color:var(--accent);background:var(--accent-glow)}
+.queue-item.done{opacity:.4}
+.queue-num{font-family:var(--mono);font-size:10px;color:var(--muted);min-width:16px}
+.queue-label{flex:1;font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.queue-label input{width:100%;font-family:var(--sans);font-size:13px;background:var(--surface2);border:1px solid var(--accent);border-radius:5px;color:var(--text);padding:3px 6px;outline:none}
+.queue-time{font-family:var(--mono);font-size:11px;color:var(--accent);background:var(--accent-glow);border-radius:4px;padding:2px 6px;white-space:nowrap}
+.queue-time input{width:50px;font-family:var(--mono);font-size:11px;background:var(--surface2);border:1px solid var(--accent);border-radius:4px;color:var(--text);padding:2px 4px;text-align:center;outline:none}
+.queue-del{background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:2px;line-height:1}
+.queue-del:active{color:var(--red)}
+.queue-add{display:flex;gap:6px;margin-top:6px}
+.queue-add input{flex:1;font-family:var(--sans);font-size:13px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;outline:none}
+.queue-add input:focus{border-color:var(--accent)}
+.queue-add input[type=number]{width:60px;flex:0;text-align:center;font-family:var(--mono)}
+.queue-add button{background:var(--accent);border:none;border-radius:6px;color:#fff;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer}
+.queue-add button:active{opacity:.8}
+</style>
+</head>
+<body>
+
+<div id="setup">
+  <div class="icon">&#9670;</div>
+  <h2>Connect to Timer</h2>
+  <p>Enter the IP address shown in the desktop app's Remote section.</p>
+  <div class="ip-form">
+    <input type="text" id="ipInput" placeholder="192.168.1.100" autocomplete="off" enterkeyhint="go">
+    <button id="connectBtn">Connect</button>
+  </div>
+  <div id="disconnected">
+    <p style="color:var(--red)">Disconnected. Reconnecting...</p>
+  </div>
+</div>
+
+<div id="app">
+  <div class="conn-badge">&#9679; Connected</div>
+
+  <div class="timer-section">
+    <div class="timer-label" id="itemLabel">—</div>
+    <div class="timer-display" id="timerDisplay">00:00</div>
+    <div class="timer-paused" id="pausedBadge">Paused</div>
+  </div>
+
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-track"></div>
+    <div class="progress-fill" id="progressFill"></div>
+  </div>
+
+  <div class="controls">
+    <button class="ctrl-btn prev" id="prevBtn">&#9664; Prev</button>
+    <button class="ctrl-btn pause" id="pauseBtn">Pause</button>
+    <button class="ctrl-btn skip" id="skipBtn">Skip &#9654;</button>
+    <button class="ctrl-btn end" id="endBtn">End</button>
+  </div>
+
+  <div class="seek-row">
+    <input type="text" class="seek-input" id="seekInput" placeholder="MM:SS" autocomplete="off">
+    <button class="seek-go" id="seekBtn">Go</button>
+  </div>
+
+  <div class="queue-section">
+    <div class="queue-header">
+      <h3>Queue</h3>
+      <span class="queue-count" id="queueCount">0</span>
+    </div>
+    <div class="queue-list" id="queueList"></div>
+    <div class="queue-add">
+      <input type="text" id="newLabel" placeholder="Item name" autocomplete="off">
+      <input type="number" id="newMins" value="1" min="0.25" step="0.25">
+      <button id="addBtn">Add</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'remote_ip';
+let ws = null;
+let state = { queue: [], index: 0, totalSeconds: 0, itemTotalSeconds: 0, isPaused: false, running: false, mode: 'auto', complete: false, previewSeconds: 5, gapSeconds: 0 };
+let wsIp = '';
+
+function getStoredIp() { try { return localStorage.getItem(STORAGE_KEY); } catch(e) { return null; } }
+function setStoredIp(ip) { try { localStorage.setItem(STORAGE_KEY, ip); } catch(e) {} }
+
+function connect(ip) {
+  if (ws) { ws.onclose = null; ws.close(); }
+  wsIp = ip;
+  setStoredIp(ip);
+  const url = 'ws://' + ip + ':4337/ws';
+  ws = new WebSocket(url);
+  ws.onopen = () => {
+    document.getElementById('setup').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    ws.send(JSON.stringify({ type: 'request_state' }));
+  };
+  ws.onmessage = e => {
+    try {
+      const data = JSON.parse(e.data);
+      if (data.type === 'state') {
+        state = data;
+        updateUI();
+      }
+    } catch(_) {}
+  };
+  ws.onclose = () => {
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('setup').style.display = 'flex';
+    document.getElementById('disconnected').style.display = 'flex';
+    setTimeout(() => connect(wsIp), 3000);
+  };
+}
+
+// Restore stored IP
+const stored = getStoredIp();
+if (stored) {
+  document.getElementById('ipInput').value = stored;
+  connect(stored);
+}
+
+document.getElementById('connectBtn').onclick = () => {
+  const ip = document.getElementById('ipInput').value.trim();
+  if (ip) connect(ip);
+};
+document.getElementById('ipInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('connectBtn').click();
+});
+
+function send(cmd) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(cmd));
+  }
+}
+
+function updateUI() {
+  const display = document.getElementById('timerDisplay');
+  const abs = Math.abs(state.totalSeconds);
+  const neg = state.totalSeconds < 0;
+  const m = Math.floor(abs / 60);
+  const s = abs % 60;
+  const timeStr = (neg ? '-' : '') + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+  display.textContent = timeStr;
+  display.className = 'timer-display' + (state.totalSeconds <= 10 && !neg ? ' flash' : state.totalSeconds <= 30 && !neg ? ' danger' : state.totalSeconds <= 60 && !neg ? ' warn' : '');
+  if (neg) display.className = 'timer-display danger';
+
+  document.getElementById('itemLabel').textContent = state.itemLabel || '—';
+
+  const pct = state.itemTotalSeconds > 0 ? Math.max(0, (state.totalSeconds / state.itemTotalSeconds) * 100) : 0;
+  document.getElementById('progressFill').style.width = pct + '%';
+
+  const pb = document.getElementById('pausedBadge');
+  pb.style.display = state.isPaused ? 'block' : 'none';
+
+  const pauseBtn = document.getElementById('pauseBtn');
+  pauseBtn.textContent = state.isPaused ? 'Resume' : 'Pause';
+  pauseBtn.className = 'ctrl-btn pause' + (state.isPaused ? ' active' : '');
+
+  if (state.complete) {
+    display.textContent = '00:00';
+    document.getElementById('itemLabel').textContent = 'Program Complete!';
+    document.getElementById('progressFill').style.width = '0%';
+  }
+
+  renderQueue();
+}
+
+function renderQueue() {
+  const list = document.getElementById('queueList');
+  const q = state.queue || [];
+  document.getElementById('queueCount').textContent = q.length + (q.length === 1 ? ' item' : ' items');
+  list.innerHTML = q.map((item, i) => {
+    const cls = i < state.index ? 'done' : i === state.index && state.running ? 'active' : '';
+    return '<div class="queue-item ' + cls + '">' +
+      '<span class="queue-num">' + String(i+1).padStart(2,'0') + '</span>' +
+      '<span class="queue-label" data-edit-label="' + i + '">' + esc(item.label) + '</span>' +
+      '<span class="queue-time" data-edit-time="' + i + '">' + fmtDur(item.seconds) + '</span>' +
+      '<button class="queue-del" data-del="' + i + '">✕</button>' +
+    '</div>';
+  }).join('');
+
+  list.querySelectorAll('[data-del]').forEach(btn => {
+    btn.onclick = e => {
+      e.stopPropagation();
+      send({ type: 'queue_edit', action: 'delete', index: +btn.dataset.del });
+    };
+  });
+
+  list.querySelectorAll('[data-edit-label]').forEach(el => {
+    el.addEventListener('click', function() {
+      const i = +this.dataset.editLabel;
+      const orig = state.queue[i].label;
+      const inp = document.createElement('input');
+      inp.value = orig;
+      inp.addEventListener('keydown', e => {
+        if (e.key === 'Enter') inp.blur();
+        if (e.key === 'Escape') { inp.value = orig; inp.blur(); }
+        e.stopPropagation();
+      });
+      inp.addEventListener('blur', () => {
+        const val = inp.value.trim();
+        if (val && val !== orig) {
+          send({ type: 'queue_edit', action: 'update', index: i, label: val });
+        } else {
+          renderQueue();
+        }
+      });
+      inp.addEventListener('click', e => e.stopPropagation());
+      this.replaceWith(inp);
+      inp.focus();
+      inp.select();
+    });
+  });
+
+  list.querySelectorAll('[data-edit-time]').forEach(el => {
+    el.addEventListener('click', function() {
+      const i = +this.dataset.editTime;
+      const orig = Math.round(state.queue[i].seconds / 60);
+      const inp = document.createElement('input');
+      inp.type = 'number';
+      inp.value = orig;
+      inp.min = 0.25;
+      inp.step = 0.25;
+      inp.addEventListener('keydown', e => {
+        if (e.key === 'Enter') inp.blur();
+        if (e.key === 'Escape') { inp.value = orig; inp.blur(); }
+        e.stopPropagation();
+      });
+      inp.addEventListener('blur', () => {
+        const mins = parseFloat(inp.value);
+        if (!isNaN(mins) && mins > 0 && mins !== orig) {
+          send({ type: 'queue_edit', action: 'update', index: i, seconds: Math.round(mins * 60) });
+        } else {
+          renderQueue();
+        }
+      });
+      inp.addEventListener('click', e => e.stopPropagation());
+      this.replaceWith(inp);
+      inp.focus();
+      inp.select();
+    });
+  });
+}
+
+function esc(s) { return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmtDur(s) { const m = Math.floor(s/60), sec = s%60; return sec > 0 ? m+'m '+sec+'s' : m+'m'; }
+
+document.getElementById('pauseBtn').onclick = () => send({ type: state.isPaused ? 'resume' : 'pause' });
+document.getElementById('skipBtn').onclick = () => send({ type: 'skip' });
+document.getElementById('prevBtn').onclick = () => send({ type: 'prev' });
+document.getElementById('endBtn').onclick = () => send({ type: 'reset' });
+document.getElementById('seekBtn').onclick = () => {
+  const val = document.getElementById('seekInput').value.trim();
+  if (val) send({ type: 'seek', value: val });
+};
+document.getElementById('seekInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('seekBtn').click();
+});
+document.getElementById('progressWrap').addEventListener('click', e => {
+  if (!state.running || !state.itemTotalSeconds) return;
+  const rect = e.currentTarget.getBoundingClientRect();
+  const pct = (e.clientX - rect.left) / rect.width;
+  const secs = Math.round(state.itemTotalSeconds * pct);
+  send({ type: 'seek', value: String(Math.floor(secs / 60)).padStart(2,'0') + ':' + String(secs % 60).padStart(2,'0') });
+});
+document.getElementById('addBtn').onclick = () => {
+  const label = document.getElementById('newLabel').value.trim();
+  const mins = parseFloat(document.getElementById('newMins').value);
+  if (!label || isNaN(mins) || mins <= 0) return;
+  send({ type: 'queue_edit', action: 'add', label, seconds: Math.round(mins * 60) });
+  document.getElementById('newLabel').value = '';
+};
+</script>
+</body>
+</html>
